@@ -42,4 +42,24 @@ public record Money(BigDecimal amount, Currency currency) {
             throw new CurrencyMismatchException(currency, other.currency);
         }
     }
+
+    public static Money zero(Currency currency) {
+        return new Money(BigDecimal.ZERO, currency);
+    }
+
+    public boolean isZero() {
+        return amount.signum() == 0;
+    }
+
+    public boolean isNegative() {
+        return amount.signum() < 0;
+    }
+
+    public boolean isPositive() {
+        return amount.signum() > 0;
+    }
+
+    public Money negate() {
+        return new Money(amount.negate(), currency);
+    }
 }

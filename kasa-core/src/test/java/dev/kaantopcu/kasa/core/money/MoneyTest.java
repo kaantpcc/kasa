@@ -125,4 +125,53 @@ class MoneyTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("other");
     }
+
+    @Test
+    void createsZeroInCurrencyScale() {
+        Money zero = Money.zero(TRY);
+
+        assertThat(zero).isEqualTo(Money.of("0.00", TRY));
+        assertThat(zero.isZero()).isTrue();
+    }
+
+    @Test
+    void treatsPositiveAmountsAsPositive() {
+        Money money = Money.of("0.01", TRY);
+
+        assertThat(money.isPositive()).isTrue();
+        assertThat(money.isNegative()).isFalse();
+        assertThat(money.isZero()).isFalse();
+    }
+
+    @Test
+    void treatsNegativeAmountsAsNegative() {
+        Money money = Money.of("-0.01", TRY);
+
+        assertThat(money.isNegative()).isTrue();
+        assertThat(money.isPositive()).isFalse();
+        assertThat(money.isZero()).isFalse();
+    }
+
+    @Test
+    void treatsZeroAsNeitherPositiveNorNegative() {
+        Money zero = Money.zero(TRY);
+
+        assertThat(zero.isPositive()).isFalse();
+        assertThat(zero.isNegative()).isFalse();
+    }
+
+    @Test
+    void negatesAmount() {
+        assertThat(Money.of("25.50", TRY).negate()).isEqualTo(Money.of("-25.50", TRY));
+        assertThat(Money.of("-25.50", TRY).negate()).isEqualTo(Money.of("25.50", TRY));
+    }
+
+    @Test
+    void returnsToOriginalAfterAddingNegation() {
+        Money money = Money.of("120.00", TRY);
+
+        Money result = money.add(money.negate());
+
+        assertThat(result.isZero()).isTrue();
+    }
 }
