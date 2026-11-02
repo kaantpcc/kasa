@@ -14,6 +14,7 @@ class MoneyTest {
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency JPY = Currency.getInstance("JPY");
     private static final Currency USD = Currency.getInstance("USD");
+    private static final Currency GOLD = Currency.getInstance("XAU");
 
     @Test
     void createsMoneyFromAmountAndCurrency() {
@@ -89,7 +90,7 @@ class MoneyTest {
     }
 
     @Test
-    void keepOriginalUnchangedAfterAdding() {
+    void keepsOriginalUnchangedAfterAdding() {
         Money original = Money.of("100.00", TRY);
 
         original.add(Money.of("50.00", TRY));
@@ -173,5 +174,25 @@ class MoneyTest {
         Money result = money.add(money.negate());
 
         assertThat(result.isZero()).isTrue();
+    }
+
+    @Test
+    void rejectsNullAmountText() {
+        assertThatThrownBy(() -> Money.of(null, TRY))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("amount");
+    }
+
+    @Test
+    void rejectsCurrencyWithoutDefinedDecimalPlaces() {
+        assertThatThrownBy(() -> Money.of("10", GOLD))
+                .isInstanceOf(UnsupportedCurrencyException.class)
+                .hasMessage("XAU is not supported: it has no defined decimal places");
+    }
+
+    @Test
+    void rejectsZeroInCurrencyWithoutDefinedDecimalPlaces() {
+        assertThatThrownBy(() -> Money.zero(GOLD))
+                .isInstanceOf(UnsupportedCurrencyException.class);
     }
 }
