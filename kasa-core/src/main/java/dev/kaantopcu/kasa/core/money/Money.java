@@ -25,4 +25,21 @@ public record Money(BigDecimal amount, Currency currency) {
             throw new InvalidMoneyScaleException(amount, currency, e);
         }
     }
+
+    public Money add(Money other) {
+        requireSameCurrency(other);
+        return new Money(amount.add(other.amount), currency);
+    }
+
+    public Money subtract(Money other) {
+        requireSameCurrency(other);
+        return new Money(amount.subtract(other.amount), currency);
+    }
+
+    private void requireSameCurrency(Money other) {
+        Objects.requireNonNull(other, "other");
+        if (!currency.equals(other.currency)) {
+            throw new CurrencyMismatchException(currency, other.currency);
+        }
+    }
 }

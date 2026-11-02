@@ -13,6 +13,7 @@ class MoneyTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency JPY = Currency.getInstance("JPY");
+    private static final Currency USD = Currency.getInstance("USD");
 
     @Test
     void createsMoneyFromAmountAndCurrency() {
@@ -64,5 +65,64 @@ class MoneyTest {
     @Test
     void dropsTrailingZerosBeyondCurrencyDecimalPlaces() {
         assertThat(Money.of("10.500", TRY).amount()).isEqualTo(new BigDecimal("10.50"));
+    }
+
+    @Test
+    void addsMoneyOfSameCurrency() {
+        Money total = Money.of("100.00", TRY).add(Money.of("50.25", TRY));
+
+        assertThat(total).isEqualTo(Money.of("150.25", TRY));
+    }
+
+    @Test
+    void subtractsMoneyOfSameCurrency() {
+        Money remaining = Money.of("100.00", TRY).subtract(Money.of("30.50", TRY));
+
+        assertThat(remaining).isEqualTo(Money.of("69.50", TRY));
+    }
+
+    @Test
+    void allowsNegativeResultWhenSubtracting() {
+        Money result = Money.of("50.00", TRY).subtract(Money.of("80.00", TRY));
+
+        assertThat(result).isEqualTo(Money.of("-30.00", TRY));
+    }
+
+    @Test
+    void keepOriginalUnchangedAfterAdding() {
+        Money original = Money.of("100.00", TRY);
+
+        original.add(Money.of("50.00", TRY));
+
+        assertThat(original).isEqualTo(Money.of("100.00", TRY));
+    }
+
+    @Test
+    void rejectsAddingDifferentCurrencies() {
+        Money lira = Money.of("100.00", TRY);
+        Money dollar = Money.of("10.00", USD);
+
+        assertThatThrownBy(() -> lira.add(dollar))
+                .isInstanceOf(CurrencyMismatchException.class)
+                .hasMessage("Cannot combine TRY with USD");
+    }
+
+    @Test
+    void rejectsSubtractingDifferentCurrencies() {
+        Money lira = Money.of("100.00", TRY);
+        Money dollar = Money.of("10.00", USD);
+
+        assertThatThrownBy(() -> lira.subtract(dollar))
+                .isInstanceOf(CurrencyMismatchException.class)
+                .hasMessage("Cannot combine TRY with USD");
+    }
+
+    @Test
+    void rejectsAddingNull() {
+        Money lira = Money.of("100.00", TRY);
+
+        assertThatThrownBy(() -> lira.add(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("other");
     }
 }
