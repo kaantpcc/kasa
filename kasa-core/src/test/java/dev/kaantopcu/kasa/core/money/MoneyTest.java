@@ -1,7 +1,6 @@
 package dev.kaantopcu.kasa.core.money;
 
 import org.junit.jupiter.api.Test;
-import org.junit.platform.commons.function.Try;
 
 import java.math.BigDecimal;
 import java.util.Currency;
