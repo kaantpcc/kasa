@@ -1,0 +1,67 @@
+package dev.kaantopcu.kasa.core.account;
+
+import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
+import org.junit.jupiter.api.Test;
+
+import java.util.Currency;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class HoldableAccountTest {
+
+    private static final Currency TRY = Currency.getInstance("TRY");
+    private static final Currency USD = Currency.getInstance("USD");
+
+    private static final Account SELLER_WALLET =
+            new Account(new AccountId("seller-42-wallet"), TRY, Side.CREDIT);
+    private static final Account SELLER_WALLET_HELD =
+            new Account(new AccountId("seller-42-wallet-held"), TRY, Side.CREDIT);
+
+    @Test
+    void createsHoldableAccountWithAvailableAndHeldAccounts() {
+        HoldableAccount account = new HoldableAccount(SELLER_WALLET, SELLER_WALLET_HELD);
+
+        assertThat(account.available()).isEqualTo(SELLER_WALLET);
+        assertThat(account.held()).isEqualTo(SELLER_WALLET_HELD);
+    }
+
+    @Test
+    void rejectsNullAvailableAccount() {
+        assertThatThrownBy(() -> new HoldableAccount(null, SELLER_WALLET_HELD))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("available");
+    }
+
+    @Test
+    void rejectsNullHeldAccount() {
+        assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("held");
+    }
+
+    @Test
+    void rejectsSameAccountAsAvailableAndHeld() {
+        assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, SELLER_WALLET))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Held account must differ from available account, got seller-42-wallet");
+    }
+
+    @Test
+    void rejectsHeldAccountInDifferentCurrency() {
+        Account heldInUsd = new Account(new AccountId("seller-42-wallet-held"), USD, Side.CREDIT);
+
+        assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, heldInUsd))
+                .isInstanceOf(CurrencyMismatchException.class)
+                .hasMessage("Cannot combine TRY with USD");
+    }
+
+    @Test
+    void rejectsHeldAccountWithDifferentNormalBalance() {
+        Account heldOnOtherSide = new Account(new AccountId("seller-42-wallet-held"), TRY, Side.DEBIT);
+
+        assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, heldOnOtherSide))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Held account must have the same normal balance as available account");
+    }
+}
