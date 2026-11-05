@@ -10,6 +10,9 @@ import java.util.Objects;
 
 public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
 
+    private static final String CAPTURE_SUFFIX = ":capture";
+    private static final String RELEASE_SUFFIX = ":release";
+
     public Hold {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(account, "account");
@@ -24,12 +27,33 @@ public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
                 increase(account.held())));
     }
 
+    public Transaction capture(Account destination) {
+        Objects.requireNonNull(destination, "destination");
+        return new Transaction(suffixedKey(CAPTURE_SUFFIX), List.of(
+                decrease(account.held()),
+                counterpart(destination)));
+    }
+
+    public Transaction release() {
+        return new Transaction(suffixedKey(RELEASE_SUFFIX), List.of(
+                decrease(account.held()),
+                increase(account.available())));
+    }
+
     private Entry decrease(Account target) {
         return new Entry(target, amount, target.normalBalance().opposite());
     }
 
     private Entry increase(Account target) {
         return new Entry(target, amount, target.normalBalance());
+    }
+
+    private Entry counterpart(Account destination) {
+        return new Entry(destination, amount, account.held().normalBalance());
+    }
+
+    private IdempotencyKey suffixedKey(String suffix) {
+        return new IdempotencyKey(key.value() + suffix);
     }
 
     private static void requirePositive(Money amount) {

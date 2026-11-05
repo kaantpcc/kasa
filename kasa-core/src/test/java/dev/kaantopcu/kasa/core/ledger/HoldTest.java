@@ -19,6 +19,7 @@ class HoldTest {
     private static final Currency USD = Currency.getInstance("USD");
 
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
+    private static final Account BANK = account("bank", Side.DEBIT);
     private static final HoldableAccount SELLER = new HoldableAccount(
             account("seller-42-wallet", Side.CREDIT),
             account("seller-42-wallet-held", Side.CREDIT));
@@ -28,10 +29,7 @@ class HoldTest {
 
     @Test
     void placeMovesAmountFromAvailableToHeldAccount() {
-        ledger.post(Transaction.builder("order-1")
-                .debit(CUSTOMER_PAYMENTS, lira("600.00"))
-                .credit(SELLER.available(), lira("600.00"))
-                .build());
+        fundSeller("600.00");
 
         ledger.post(new Hold(HOLD_KEY, SELLER, lira("300.00")).place());
 
@@ -44,6 +42,55 @@ class HoldTest {
         Transaction placement = new Hold(HOLD_KEY, SELLER, lira("300.00")).place();
 
         assertThat(placement.idempotencyKey()).isEqualTo(HOLD_KEY);
+    }
+
+    @Test
+    void captureMovesHeldAmountOutToDestination() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.post(hold.place());
+
+        ledger.post(hold.capture(BANK));
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("300.00"));
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void releaseReturnsHeldAmountToAvailableAccount() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.post(hold.place());
+
+        ledger.post(hold.release());
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("600.00"));
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void captureUsesSuffixedHoldKey() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        assertThat(hold.capture(BANK).idempotencyKey())
+                .isEqualTo(new IdempotencyKey("payout-1-hold:capture"));
+    }
+
+    @Test
+    void releaseUsesSuffixedHoldKey() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        assertThat(hold.release().idempotencyKey())
+                .isEqualTo(new IdempotencyKey("payout-1-hold:release"));
+    }
+
+    @Test
+    void rejectsNullCaptureDestination() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        assertThatThrownBy(() -> hold.capture(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("destination");
     }
 
     @Test
@@ -86,6 +133,13 @@ class HoldTest {
         assertThatThrownBy(() -> new Hold(HOLD_KEY, SELLER, Money.of("300.00", USD)))
                 .isInstanceOf(CurrencyMismatchException.class)
                 .hasMessage("Cannot combine TRY with USD");
+    }
+
+    private void fundSeller(String amount) {
+        ledger.post(Transaction.builder("order-1")
+                .debit(CUSTOMER_PAYMENTS, lira(amount))
+                .credit(SELLER.available(), lira(amount))
+                .build());
     }
 
     private static Account account(String id, Side normalBalance) {
