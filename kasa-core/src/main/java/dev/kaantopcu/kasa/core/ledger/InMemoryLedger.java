@@ -28,6 +28,17 @@ public final class InMemoryLedger {
         return balance;
     }
 
+    public List<Entry> statement(Account account) {
+        Objects.requireNonNull(account, "account");
+        List<Entry> accountEntries = new ArrayList<>();
+        for (Entry entry : entries) {
+            if (entry.account().equals(account)) {
+                accountEntries.add(entry);
+            }
+        }
+        return List.copyOf(accountEntries);
+    }
+
     private static Money signedAmount(Entry entry, Side normalBalance) {
         if (entry.side() == normalBalance) {
             return entry.amount();

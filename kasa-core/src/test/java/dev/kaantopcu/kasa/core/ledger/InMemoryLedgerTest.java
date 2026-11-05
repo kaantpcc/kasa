@@ -76,6 +76,42 @@ class InMemoryLedgerTest {
                 .hasMessage("account");
     }
 
+    @Test
+    void returnsEmptyStatementWhenAccountHasNoEntries() {
+        ledger.post(sale("order-1"));
+
+        assertThat(ledger.statement(BANK)).isEmpty();
+    }
+
+    @Test
+    void returnsOnlyEntriesOfGivenAccountInPostingOrder() {
+        ledger.post(sale("order-1"));
+        ledger.post(Transaction.builder("payout-1")
+                .debit(SELLER_WALLET, lira("300.00"))
+                .credit(BANK, lira("300.00"))
+                .build());
+
+        assertThat(ledger.statement(SELLER_WALLET)).containsExactly(
+                new Entry(SELLER_WALLET, lira("900.00"), Side.CREDIT),
+                new Entry(SELLER_WALLET, lira("300.00"), Side.DEBIT));
+    }
+
+    @Test
+    void doesNotAllowStatementToBeModified() {
+        ledger.post(sale("order-1"));
+
+        assertThatThrownBy(() -> ledger.statement(SELLER_WALLET).add(
+                new Entry(SELLER_WALLET, lira("50.00"), Side.CREDIT)))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void rejectsNullAccountForStatement() {
+        assertThatThrownBy(() -> ledger.statement(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("account");
+    }
+
     private static Transaction sale(String orderKey) {
         return Transaction.builder(orderKey)
                 .debit(CUSTOMER_PAYMENTS, lira("1000.00"))
