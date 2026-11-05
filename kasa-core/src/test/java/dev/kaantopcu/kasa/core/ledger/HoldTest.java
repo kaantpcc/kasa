@@ -169,6 +169,56 @@ class HoldTest {
                 .build());
     }
 
+    @Test
+    void placeHoldMovesAmountWhenAvailableBalanceIsEnough() {
+        fundSeller("600.00");
+
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("300.00"));
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void placeHoldAllowsHoldingEntireAvailableBalance() {
+        fundSeller("600.00");
+
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("600.00")));
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void rejectsHoldWhenAvailableBalanceIsInsufficient() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        Hold secondHold = new Hold(new IdempotencyKey("payout-2-hold"), SELLER, lira("600.00"));
+
+        assertThatThrownBy(() -> ledger.placeHold(secondHold))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance in seller-42-wallet: available 300.00 TRY, requested 600.00 TRY");
+    }
+
+    @Test
+    void keepsBalancesUnchangedWhenHoldIsRejected() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        Hold secondHold = new Hold(new IdempotencyKey("payout-2-hold"), SELLER, lira("600.00"));
+
+        assertThatThrownBy(() -> ledger.placeHold(secondHold))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("300.00"));
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void rejectsNullHold() {
+        assertThatThrownBy(() -> ledger.placeHold(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("hold");
+    }
+
     private static Account account(String id, Side normalBalance) {
         return new Account(new AccountId(id), TRY, normalBalance);
     }

@@ -20,6 +20,13 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     }
 
     @Override
+    public void placeHold(Hold hold) {
+        Objects.requireNonNull(hold, "hold");
+        requireSufficientFunds(hold);
+        post(hold.place());
+    }
+
+    @Override
     public Money balance(Account account) {
         Objects.requireNonNull(account, "account");
         Money balance = Money.zero(account.currency());
@@ -47,6 +54,14 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     public Money totalBalance(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
         return balance(account.available()).add(balance(account.held()));
+    }
+
+    private void requireSufficientFunds(Hold hold) {
+        Account available = hold.account().available();
+        Money availableBalance = balance(available);
+        if (availableBalance.subtract(hold.amount()).isNegative()) {
+            throw new InsufficientFundsException(available.id(), availableBalance, hold.amount());
+        }
     }
 
     private static Money signedAmount(Entry entry, Side normalBalance) {
