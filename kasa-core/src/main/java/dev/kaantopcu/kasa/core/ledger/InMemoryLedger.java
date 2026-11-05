@@ -3,6 +3,7 @@ package dev.kaantopcu.kasa.core.ledger;
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
+import dev.kaantopcu.kasa.core.account.HoldableAccount;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +41,12 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
             }
         }
         return List.copyOf(accountEntries);
+    }
+
+    @Override
+    public Money totalBalance(HoldableAccount account) {
+        Objects.requireNonNull(account, "account");
+        return balance(account.available()).add(balance(account.held()));
     }
 
     private static Money signedAmount(Entry entry, Side normalBalance) {

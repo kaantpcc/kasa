@@ -94,6 +94,33 @@ class HoldTest {
     }
 
     @Test
+    void totalBalanceIncludesHeldAmount() {
+        fundSeller("600.00");
+
+        ledger.post(new Hold(HOLD_KEY, SELLER, lira("300.00")).place());
+
+        assertThat(ledger.totalBalance(SELLER)).isEqualTo(lira("600.00"));
+    }
+
+    @Test
+    void totalBalanceDropsAfterCapture() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.post(hold.place());
+
+        ledger.post(hold.capture(BANK));
+
+        assertThat(ledger.totalBalance(SELLER)).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void rejectsNullAccountForTotalBalance() {
+        assertThatThrownBy(() -> ledger.totalBalance(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("account");
+    }
+
+    @Test
     void rejectsNullKey() {
         assertThatThrownBy(() -> new Hold(null, SELLER, lira("300.00")))
                 .isInstanceOf(NullPointerException.class)
