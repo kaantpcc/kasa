@@ -8,15 +8,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public final class InMemoryLedger {
+public final class InMemoryLedger implements LedgerWriter, LedgerReader {
 
     private final List<Entry> entries = new ArrayList<>();
 
+    @Override
     public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
         entries.addAll(transaction.entries());
     }
 
+    @Override
     public Money balance(Account account) {
         Objects.requireNonNull(account, "account");
         Money balance = Money.zero(account.currency());
@@ -28,6 +30,7 @@ public final class InMemoryLedger {
         return balance;
     }
 
+    @Override
     public List<Entry> statement(Account account) {
         Objects.requireNonNull(account, "account");
         List<Entry> accountEntries = new ArrayList<>();
