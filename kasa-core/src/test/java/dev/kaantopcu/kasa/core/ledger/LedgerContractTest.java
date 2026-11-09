@@ -22,16 +22,16 @@ abstract class LedgerContractTest {
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
-    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT, nonNegative());
+    private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT, nonNegative());
     private static final Account COMMISSION = account("commission", Side.CREDIT, unlimited());
     private static final Account BANK = account("bank", Side.DEBIT, unlimited());
     private static final HoldableAccount SELLER = new HoldableAccount(
             SELLER_WALLET,
-            account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
-    private static final Account CREDIT_CUSTOMER = account("customer-7-wallet", Side.CREDIT, overdraft(lira("500.00")));
+            account("seller:42:wallet:held", Side.CREDIT, nonNegative()));
+    private static final Account CREDIT_CUSTOMER = account("customer:7:wallet", Side.CREDIT, overdraft(lira("500.00")));
     private static final HoldableAccount CREDIT_CUSTOMER_CARD = new HoldableAccount(
             CREDIT_CUSTOMER,
-            account("customer-7-wallet-held", Side.CREDIT, nonNegative()));
+            account("customer:7:wallet:held", Side.CREDIT, nonNegative()));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private Ledger ledger;
@@ -285,7 +285,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.placeHold(secondHold))
                 .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller-42-wallet: available 300.00 TRY, requested 600.00 TRY");
+                .hasMessage("Insufficient available balance in seller:42:wallet: available 300.00 TRY, requested 600.00 TRY");
     }
 
     @Test
@@ -337,7 +337,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.post(toMisspelledWallet))
                 .isInstanceOf(AccountNotOpenException.class)
-                .hasMessage("Account seler-42-wallet has not been opened");
+                .hasMessage("Account seler:42:wallet has not been opened");
     }
 
     @Test
@@ -363,20 +363,20 @@ abstract class LedgerContractTest {
 
     @Test
     void rejectsOpeningSameIdWithDifferentDefinition() {
-        Account sellerWalletInUsd = new Account(new AccountId("seller-42-wallet"), USD, Side.CREDIT, nonNegative());
+        Account sellerWalletInUsd = new Account(new AccountId("seller:42:wallet"), USD, Side.CREDIT, nonNegative());
 
         assertThatThrownBy(() -> ledger.open(sellerWalletInUsd))
                 .isInstanceOf(AccountDefinitionConflictException.class)
-                .hasMessage("Account seller-42-wallet is already open with a different definition");
+                .hasMessage("Account seller:42:wallet is already open with a different definition");
     }
 
     @Test
     void rejectsOpeningSameIdWithDifferentBalancePolicy() {
-        Account sellerWalletWithOverdraft = account("seller-42-wallet", Side.CREDIT, overdraft(lira("500.00")));
+        Account sellerWalletWithOverdraft = account("seller:42:wallet", Side.CREDIT, overdraft(lira("500.00")));
 
         assertThatThrownBy(() -> ledger.open(sellerWalletWithOverdraft))
                 .isInstanceOf(AccountDefinitionConflictException.class)
-                .hasMessage("Account seller-42-wallet is already open with a different definition");
+                .hasMessage("Account seller:42:wallet is already open with a different definition");
     }
 
     @Test
@@ -392,19 +392,19 @@ abstract class LedgerContractTest {
     void rejectsTransactionUsingDifferentDefinitionOfOpenAccount() {
         Transaction withWrongDefinition = Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
-                .credit(account("seller-42-wallet", Side.DEBIT, nonNegative()), lira("900.00"))
+                .credit(account("seller:42:wallet", Side.DEBIT, nonNegative()), lira("900.00"))
                 .build();
 
         assertThatThrownBy(() -> ledger.post(withWrongDefinition))
                 .isInstanceOf(AccountDefinitionConflictException.class)
-                .hasMessage("Account seller-42-wallet is already open with a different definition");
+                .hasMessage("Account seller:42:wallet is already open with a different definition");
     }
 
     @Test
     void rejectsBalanceOfAccountThatIsNotOpen() {
-        assertThatThrownBy(() -> ledger.balance(account("seler-42-wallet", Side.CREDIT, nonNegative())))
+        assertThatThrownBy(() -> ledger.balance(account("seler:42:wallet", Side.CREDIT, nonNegative())))
                 .isInstanceOf(AccountNotOpenException.class)
-                .hasMessage("Account seler-42-wallet has not been opened");
+                .hasMessage("Account seler:42:wallet has not been opened");
     }
 
     @Test
@@ -430,7 +430,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.post(tooLargePayout))
                 .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller-42-wallet: available 200.00 TRY, requested 1000.00 TRY");
+                .hasMessage("Insufficient available balance in seller:42:wallet: available 200.00 TRY, requested 1000.00 TRY");
     }
 
     @Test
@@ -487,7 +487,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.post(beyondLimit))
                 .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in customer-7-wallet: available 600.00 TRY, requested 600.01 TRY");
+                .hasMessage("Insufficient available balance in customer:7:wallet: available 600.00 TRY, requested 600.01 TRY");
     }
 
     @Test
@@ -504,7 +504,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.placeHold(beyondLimit))
                 .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in customer-7-wallet: available 500.00 TRY, requested 500.01 TRY");
+                .hasMessage("Insufficient available balance in customer:7:wallet: available 500.00 TRY, requested 500.01 TRY");
     }
 
     @Test
@@ -517,7 +517,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.post(release))
                 .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller-42-wallet-held: available 0.00 TRY, requested 300.00 TRY");
+                .hasMessage("Insufficient available balance in seller:42:wallet:held: available 0.00 TRY, requested 300.00 TRY");
     }
 
     @Test
@@ -530,7 +530,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.post(capture))
                 .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller-42-wallet-held: available 0.00 TRY, requested 300.00 TRY");
+                .hasMessage("Insufficient available balance in seller:42:wallet:held: available 0.00 TRY, requested 300.00 TRY");
     }
 
     @Test
@@ -540,7 +540,7 @@ abstract class LedgerContractTest {
 
         assertThatThrownBy(() -> ledger.reverse(new IdempotencyKey("order-1")))
                 .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller-42-wallet: available 0.00 TRY, requested 900.00 TRY");
+                .hasMessage("Insufficient available balance in seller:42:wallet: available 0.00 TRY, requested 900.00 TRY");
     }
 
     private void fundSeller(String amount) {
@@ -575,7 +575,7 @@ abstract class LedgerContractTest {
     private static Transaction saleToMisspelledWallet() {
         return Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
-                .credit(account("seler-42-wallet", Side.CREDIT, nonNegative()), lira("900.00"))
+                .credit(account("seler:42:wallet", Side.CREDIT, nonNegative()), lira("900.00"))
                 .build();
     }
 

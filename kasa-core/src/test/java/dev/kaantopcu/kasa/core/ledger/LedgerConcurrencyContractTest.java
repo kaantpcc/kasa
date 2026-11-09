@@ -26,10 +26,10 @@ abstract class LedgerConcurrencyContractTest {
     private static final int HOLD_REQUEST_COUNT = 1_000;
 
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
-    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT, nonNegative());
+    private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT, nonNegative());
     private static final HoldableAccount SELLER = new HoldableAccount(
             SELLER_WALLET,
-            account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
+            account("seller:42:wallet:held", Side.CREDIT, nonNegative()));
 
     private Ledger ledger;
 

@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AccountTest {
 
-    private static final AccountId SELLER_WALLET = new AccountId("seller-42-wallet");
+    private static final AccountId SELLER_WALLET = new AccountId("seller:42:wallet");
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
 

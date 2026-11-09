@@ -22,12 +22,12 @@ class TransactionTest {
     private static final IdempotencyKey ORDER_KEY = new IdempotencyKey("order-123");
 
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", TRY, Side.DEBIT);
-    private static final Account SELLER_WALLET = account("seller-42-wallet", TRY, Side.CREDIT);
+    private static final Account SELLER_WALLET = account("seller:42:wallet", TRY, Side.CREDIT);
     private static final Account COMMISSION = account("commission", TRY, Side.CREDIT);
-    private static final Account CUSTOMER_USD = account("customer-7-usd", USD, Side.CREDIT);
-    private static final Account CUSTOMER_TRY = account("customer-7-try", TRY, Side.CREDIT);
-    private static final Account FX_USD = account("bank-fx-usd", USD, Side.DEBIT);
-    private static final Account FX_TRY = account("bank-fx-try", TRY, Side.DEBIT);
+    private static final Account CUSTOMER_USD = account("customer:7:usd", USD, Side.CREDIT);
+    private static final Account CUSTOMER_TRY = account("customer:7:try", TRY, Side.CREDIT);
+    private static final Account FX_USD = account("bank:fx:usd", USD, Side.DEBIT);
+    private static final Account FX_TRY = account("bank:fx:try", TRY, Side.DEBIT);
 
     @Test
     void createsBalancedTransaction() {

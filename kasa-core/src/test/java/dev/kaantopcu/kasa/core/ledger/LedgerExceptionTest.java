@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class LedgerExceptionTest {
 
-    private static final AccountId SELLER_WALLET = new AccountId("seller-42-wallet");
+    private static final AccountId SELLER_WALLET = new AccountId("seller:42:wallet");
     private static final Currency TRY = Currency.getInstance("TRY");
 
     @Test
