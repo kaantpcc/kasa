@@ -5,4 +5,6 @@ public interface LedgerWriter {
     void post(Transaction transaction);
 
     void placeHold(Hold hold);
+
+    void reverse(IdempotencyKey key);
 }
