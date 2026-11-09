@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import java.util.function.Supplier;
 
-public final class InMemoryLedger implements LedgerWriter, LedgerReader {
+public final class InMemoryLedger implements Ledger {
 
     private final List<Entry> entries = new ArrayList<>();
     private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
