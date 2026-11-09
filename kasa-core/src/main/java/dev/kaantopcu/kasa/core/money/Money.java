@@ -70,4 +70,14 @@ public record Money(BigDecimal amount, Currency currency) {
     public Money negate() {
         return new Money(amount.negate(), currency);
     }
+
+    public boolean isGreaterThan(Money other) {
+        requireSameCurrency(other);
+        return amount.compareTo(other.amount) > 0;
+    }
+
+    public boolean isLessThan(Money other) {
+        requireSameCurrency(other);
+        return amount.compareTo(other.amount) < 0;
+    }
 }

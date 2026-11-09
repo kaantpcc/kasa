@@ -194,4 +194,38 @@ class MoneyTest {
         assertThatThrownBy(() -> Money.zero(GOLD))
                 .isInstanceOf(UnsupportedCurrencyException.class);
     }
+
+    @Test
+    void isGreaterThanWhenAmountIsLarger() {
+        assertThat(Money.of("100.00", TRY).isGreaterThan(Money.of("99.99", TRY))).isTrue();
+    }
+
+    @Test
+    void isNotGreaterThanWhenAmountsAreEqual() {
+        assertThat(Money.of("100.00", TRY).isGreaterThan(Money.of("100.00", TRY))).isFalse();
+    }
+
+    @Test
+    void isLessThanWhenAmountIsSmaller() {
+        assertThat(Money.of("99.99", TRY).isLessThan(Money.of("100.00", TRY))).isTrue();
+    }
+
+    @Test
+    void isNotLessThanWhenAmountsAreEqual() {
+        assertThat(Money.of("100.00", TRY).isLessThan(Money.of("100.00", TRY))).isFalse();
+    }
+
+    @Test
+    void rejectsComparingDifferentCurrencies() {
+        assertThatThrownBy(() -> Money.of("1.00", TRY).isGreaterThan(Money.of("1.00", USD)))
+                .isInstanceOf(CurrencyMismatchException.class)
+                .hasMessage("Cannot combine TRY with USD");
+    }
+
+    @Test
+    void rejectsComparingWithNull() {
+        assertThatThrownBy(() -> Money.of("1.00", TRY).isLessThan(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("other");
+    }
 }
