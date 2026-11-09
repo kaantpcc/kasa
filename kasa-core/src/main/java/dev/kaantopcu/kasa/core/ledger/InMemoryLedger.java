@@ -94,6 +94,7 @@ public final class InMemoryLedger implements Ledger {
     private void recordAccount(Account account) {
         if (accountsById.containsKey(account.id())) {
             requireSameDefinition(account);
+            requireNotClosed(account);
             return;
         }
         accountsById.put(account.id(), account);
@@ -101,14 +102,27 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private void changeStatus(Account account, AccountStatus target) {
-        AccountStatus current = statusOf(account);
-        if (current == target) {
+        if (statusOf(account) == target) {
             return;
         }
-        if (current == AccountStatus.CLOSED) {
-            throw new AccountClosedException(account.id());
+        requireNotClosed(account);
+        if (target == AccountStatus.CLOSED) {
+            requireZeroBalance(account);
         }
         statusesById.put(account.id(), target);
+    }
+
+    private void requireNotClosed(Account account) {
+        if (statusesById.get(account.id()) == AccountStatus.CLOSED) {
+            throw new AccountClosedException(account.id());
+        }
+    }
+
+    private void requireZeroBalance(Account account) {
+        Money balance = calculateBalance(account);
+        if (!balance.isZero()) {
+            throw new NonZeroBalanceException(account.id(), balance);
+        }
     }
 
     private AccountStatus statusOf(Account account) {
@@ -178,7 +192,16 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private void requireStatusAllows(Account account, Money balanceChange) {
-        if (statusesById.get(account.id()) == AccountStatus.FROZEN && balanceChange.isNegative()) {
+        switch (statusesById.get(account.id())) {
+            case OPEN -> {
+            }
+            case FROZEN -> requireNoOutgoingMoney(account, balanceChange);
+            case CLOSED -> throw new AccountClosedException(account.id());
+        }
+    }
+
+    private static void requireNoOutgoingMoney(Account account, Money balanceChange) {
+        if (balanceChange.isNegative()) {
             throw new AccountFrozenException(account.id());
         }
     }

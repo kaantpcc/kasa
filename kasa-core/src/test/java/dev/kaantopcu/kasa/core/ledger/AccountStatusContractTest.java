@@ -277,6 +277,97 @@ abstract class AccountStatusContractTest {
         assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("600.00"));
     }
 
+    @Test
+    void closesAccountAfterBalanceIsPaidOut() {
+        ledger.post(sale("order-1", "900.00"));
+        ledger.post(payout("payout-1", "900.00"));
+
+        ledger.close(SELLER_WALLET);
+
+        assertThat(ledger.status(SELLER_WALLET)).isEqualTo(AccountStatus.CLOSED);
+    }
+
+    @Test
+    void rejectsClosingAccountWithPositiveBalance() {
+        ledger.post(sale("order-1", "900.00"));
+
+        assertThatThrownBy(() -> ledger.close(SELLER_WALLET))
+                .isInstanceOf(NonZeroBalanceException.class)
+                .hasMessage("Cannot close account seller-42-wallet with non-zero balance 900.00 TRY");
+    }
+
+    @Test
+    void rejectsClosingAccountWithNegativeBalance() {
+        ledger.post(sale("order-1", "900.00"));
+        ledger.post(payout("payout-1", "900.00"));
+
+        assertThatThrownBy(() -> ledger.close(BANK))
+                .isInstanceOf(NonZeroBalanceException.class)
+                .hasMessage("Cannot close account bank with non-zero balance -900.00 TRY");
+    }
+
+    @Test
+    void keepsAccountOpenWhenCloseIsRejected() {
+        ledger.post(sale("order-1", "900.00"));
+
+        assertThatThrownBy(() -> ledger.close(SELLER_WALLET))
+                .isInstanceOf(NonZeroBalanceException.class);
+
+        assertThat(ledger.status(SELLER_WALLET)).isEqualTo(AccountStatus.OPEN);
+    }
+
+    @Test
+    void rejectsIncomingMoneyToClosedAccount() {
+        ledger.close(SELLER_WALLET);
+        Transaction sale = sale("order-1", "900.00");
+
+        assertThatThrownBy(() -> ledger.post(sale))
+                .isInstanceOf(AccountClosedException.class)
+                .hasMessage("Account seller-42-wallet is closed");
+    }
+
+    @Test
+    void writesNothingWhenTransactionTouchesClosedAccount() {
+        ledger.close(SELLER_WALLET);
+        Transaction sale = sale("order-1", "900.00");
+
+        assertThatThrownBy(() -> ledger.post(sale))
+                .isInstanceOf(AccountClosedException.class);
+
+        assertThat(ledger.balance(CUSTOMER_PAYMENTS)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void rejectsReopeningClosedAccount() {
+        ledger.close(SELLER_WALLET);
+
+        assertThatThrownBy(() -> ledger.open(SELLER_WALLET))
+                .isInstanceOf(AccountClosedException.class)
+                .hasMessage("Account seller-42-wallet is closed");
+    }
+
+    @Test
+    void keepsHistoryOfClosedAccountReadable() {
+        ledger.post(sale("order-1", "900.00"));
+        ledger.post(payout("payout-1", "900.00"));
+
+        ledger.close(SELLER_WALLET);
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.statement(SELLER_WALLET)).hasSize(2);
+    }
+
+    @Test
+    void ignoresRetryOfTransactionAcceptedBeforeClose() {
+        ledger.post(sale("order-1", "900.00"));
+        ledger.post(payout("payout-1", "900.00"));
+        ledger.close(SELLER_WALLET);
+
+        ledger.post(payout("payout-1", "900.00"));
+
+        assertThat(ledger.statement(SELLER_WALLET)).hasSize(2);
+    }
+
     private static Transaction sale(String orderKey, String amount) {
         return Transaction.builder(orderKey)
                 .debit(CUSTOMER_PAYMENTS, lira(amount))
