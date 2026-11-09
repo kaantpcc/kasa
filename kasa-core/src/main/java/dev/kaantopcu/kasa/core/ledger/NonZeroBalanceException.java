@@ -3,7 +3,7 @@ package dev.kaantopcu.kasa.core.ledger;
 import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.money.Money;
 
-public class NonZeroBalanceException extends IllegalStateException {
+public final class NonZeroBalanceException extends LedgerException {
 
     public NonZeroBalanceException(AccountId accountId, Money balance) {
         super("Cannot close account %s with non-zero balance %s %s".formatted(
