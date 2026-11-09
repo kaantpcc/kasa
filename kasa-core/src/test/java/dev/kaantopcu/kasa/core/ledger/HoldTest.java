@@ -219,6 +219,29 @@ class HoldTest {
                 .hasMessage("hold");
     }
 
+    @Test
+    void ignoresHoldPlacedTwiceWithSameKey() {
+        fundSeller("300.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.placeHold(hold);
+
+        ledger.placeHold(hold);
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void rejectsHoldWithReusedKeyAndDifferentAmount() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        Hold differentHold = new Hold(HOLD_KEY, SELLER, lira("200.00"));
+
+        assertThatThrownBy(() -> ledger.placeHold(differentHold))
+                .isInstanceOf(IdempotencyKeyConflictException.class)
+                .hasMessage("Idempotency key payout-1-hold was already used for a different transaction");
+    }
+
     private static Account account(String id, Side normalBalance) {
         return new Account(new AccountId(id), TRY, normalBalance);
     }

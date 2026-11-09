@@ -8,21 +8,31 @@ import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Map;
+import java.util.HashMap;
 
 public final class InMemoryLedger implements LedgerWriter, LedgerReader {
 
     private final List<Entry> entries = new ArrayList<>();
+    private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
 
     @Override
     public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
+        if (transactionsByKey.containsKey(transaction.idempotencyKey())) {
+            requireSameTransaction(transactionsByKey.get(transaction.idempotencyKey()), transaction);
+            return;
+        }
+        transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
     }
 
     @Override
     public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
-        requireSufficientFunds(hold);
+        if (!transactionsByKey.containsKey(hold.key())) {
+            requireSufficientFunds(hold);
+        }
         post(hold.place());
     }
 
@@ -61,6 +71,12 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
         Money availableBalance = balance(available);
         if (availableBalance.subtract(hold.amount()).isNegative()) {
             throw new InsufficientFundsException(available.id(), availableBalance, hold.amount());
+        }
+    }
+
+    private static void requireSameTransaction(Transaction existing, Transaction incoming) {
+        if (!existing.equals(incoming)) {
+            throw new IdempotencyKeyConflictException(incoming.idempotencyKey());
         }
     }
 
