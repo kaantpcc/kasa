@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.money.Money;
@@ -18,7 +19,7 @@ class EntryTest {
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
     private static final Account SELLER_WALLET =
-            new Account(new AccountId("seller-wallet-42"), TRY, Side.CREDIT);
+            new Account(new AccountId("seller-wallet-42"), TRY, Side.CREDIT, BalancePolicy.nonNegative());
 
     @Test
     void createsEntryWithAccountAmountAndSide() {

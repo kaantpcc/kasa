@@ -12,6 +12,7 @@ public record HoldableAccount(Account available, Account held) {
         requireDifferentAccounts(available, held);
         requireSameCurrency(available, held);
         requireSameNormalBalance(available, held);
+        requireNonNegativeHeldAccount(held);
     }
 
     private static void requireDifferentAccounts(Account available, Account held) {
@@ -29,6 +30,12 @@ public record HoldableAccount(Account available, Account held) {
     private static void requireSameNormalBalance(Account available, Account held) {
         if (available.normalBalance() != held.normalBalance()) {
             throw new IllegalArgumentException("Held account must have the same normal balance as available account");
+        }
+    }
+
+    private static void requireNonNegativeHeldAccount(Account held) {
+        if (!(held.balancePolicy() instanceof BalancePolicy.NonNegative)) {
+            throw new IllegalArgumentException("Held account %s must have a non-negative balance policy".formatted(held.id().value()));
         }
     }
 }

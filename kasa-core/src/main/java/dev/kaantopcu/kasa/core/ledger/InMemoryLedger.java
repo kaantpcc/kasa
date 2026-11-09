@@ -2,12 +2,14 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -36,7 +38,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
-        write(() -> recordHold(hold));
+        write(() -> record(hold.place()));
     }
 
     @Override
@@ -77,15 +79,9 @@ public final class InMemoryLedger implements Ledger {
             return;
         }
         requireOpenAccounts(transaction);
+        requireBalancePolicies(transaction);
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
-    }
-
-    private void recordHold(Hold hold) {
-        if (!transactionsByKey.containsKey(hold.key())) {
-            requireSufficientFunds(hold);
-        }
-        record(hold.place());
     }
 
     private void recordReversal(IdempotencyKey key) {
@@ -136,12 +132,36 @@ public final class InMemoryLedger implements Ledger {
         }
     }
 
-    private void requireSufficientFunds(Hold hold) {
-        Account available = hold.account().available();
-        Money availableBalance = calculateBalance(available);
-        if (availableBalance.isLessThan(hold.amount())) {
-            throw new InsufficientFundsException(available.id(), availableBalance, hold.amount());
+    private void requireBalancePolicies(Transaction transaction) {
+        balanceChanges(transaction).forEach(this::requireWithinPolicy);
+    }
+
+    private void requireWithinPolicy(Account account, Money balanceChange) {
+        switch (account.balancePolicy()) {
+            case BalancePolicy.Unlimited() -> {
+            }
+            case BalancePolicy.NonNegative() -> requireSpendable(account, balanceChange, Money.zero(account.currency()));
+            case BalancePolicy.Overdraft(Money limit) -> requireSpendable(account, balanceChange, limit);
         }
+    }
+
+    private void requireSpendable(Account account, Money balanceChange, Money overdraftLimit) {
+        if (!balanceChange.isNegative()) {
+            return;
+        }
+        Money spendable = calculateBalance(account).add(overdraftLimit);
+        Money requested = balanceChange.negate();
+        if (spendable.isLessThan(requested)) {
+            throw new InsufficientFundsException(account.id(), spendable, requested);
+        }
+    }
+
+    private static Map<Account, Money> balanceChanges(Transaction transaction) {
+        Map<Account, Money> changes = new LinkedHashMap<>();
+        for (Entry entry : transaction.entries()) {
+            changes.merge(entry.account(), signedAmount(entry, entry.account().normalBalance()), Money::add);
+        }
+        return changes;
     }
 
     private static void requireSameTransaction(Transaction existing, Transaction incoming) {

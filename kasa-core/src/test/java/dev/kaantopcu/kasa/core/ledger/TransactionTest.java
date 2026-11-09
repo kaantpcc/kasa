@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
 import org.junit.jupiter.api.Test;
@@ -172,7 +173,7 @@ class TransactionTest {
     }
 
     private static Account account(String id, Currency currency, Side normalBalance) {
-        return new Account(new AccountId(id), currency, normalBalance);
+        return new Account(new AccountId(id), currency, normalBalance, BalancePolicy.unlimited());
     }
 
     private static Entry debit(Account account, String amount) {

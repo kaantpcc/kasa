@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
@@ -13,6 +14,8 @@ import java.util.Currency;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static dev.kaantopcu.kasa.core.account.BalancePolicy.nonNegative;
+import static dev.kaantopcu.kasa.core.account.BalancePolicy.unlimited;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -22,11 +25,11 @@ abstract class LedgerConcurrencyContractTest {
     private static final int ORDER_COUNT = 10_000;
     private static final int HOLD_REQUEST_COUNT = 1_000;
 
-    private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
-    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT);
+    private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
+    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT, nonNegative());
     private static final HoldableAccount SELLER = new HoldableAccount(
             SELLER_WALLET,
-            account("seller-42-wallet-held", Side.CREDIT));
+            account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
 
     private Ledger ledger;
 
@@ -88,8 +91,8 @@ abstract class LedgerConcurrencyContractTest {
                 .build();
     }
 
-    private static Account account(String id, Side normalBalance) {
-        return new Account(new AccountId(id), TRY, normalBalance);
+    private static Account account(String id, Side normalBalance, BalancePolicy balancePolicy) {
+        return new Account(new AccountId(id), TRY, normalBalance, balancePolicy);
     }
 
     private static Money lira(String amount) {
