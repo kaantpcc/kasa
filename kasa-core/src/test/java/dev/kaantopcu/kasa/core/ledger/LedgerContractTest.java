@@ -29,6 +29,9 @@ abstract class LedgerContractTest {
             SELLER_WALLET,
             account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
     private static final Account CREDIT_CUSTOMER = account("customer-7-wallet", Side.CREDIT, overdraft(lira("500.00")));
+    private static final HoldableAccount CREDIT_CUSTOMER_CARD = new HoldableAccount(
+            CREDIT_CUSTOMER,
+            account("customer-7-wallet-held", Side.CREDIT, nonNegative()));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private Ledger ledger;
@@ -44,6 +47,7 @@ abstract class LedgerContractTest {
         ledger.open(BANK);
         ledger.open(SELLER.held());
         ledger.open(CREDIT_CUSTOMER);
+        ledger.open(CREDIT_CUSTOMER_CARD.held());
     }
 
     @Test
@@ -475,6 +479,23 @@ abstract class LedgerContractTest {
         assertThatThrownBy(() -> ledger.post(beyondLimit))
                 .isInstanceOf(InsufficientFundsException.class)
                 .hasMessage("Insufficient available balance in customer-7-wallet: available 600.00 TRY, requested 600.01 TRY");
+    }
+
+    @Test
+    void placeHoldUsesOverdraftLimit() {
+        ledger.placeHold(new Hold(new IdempotencyKey("card-auth-1"), CREDIT_CUSTOMER_CARD, lira("500.00")));
+
+        assertThat(ledger.balance(CREDIT_CUSTOMER)).isEqualTo(lira("-500.00"));
+        assertThat(ledger.balance(CREDIT_CUSTOMER_CARD.held())).isEqualTo(lira("500.00"));
+    }
+
+    @Test
+    void rejectsHoldBeyondOverdraftLimit() {
+        Hold beyondLimit = new Hold(new IdempotencyKey("card-auth-1"), CREDIT_CUSTOMER_CARD, lira("500.01"));
+
+        assertThatThrownBy(() -> ledger.placeHold(beyondLimit))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance in customer-7-wallet: available 500.00 TRY, requested 500.01 TRY");
     }
 
     @Test

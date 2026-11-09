@@ -38,7 +38,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
-        write(() -> recordHold(hold));
+        write(() -> record(hold.place()));
     }
 
     @Override
@@ -82,13 +82,6 @@ public final class InMemoryLedger implements Ledger {
         requireBalancePolicies(transaction);
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
-    }
-
-    private void recordHold(Hold hold) {
-        if (!transactionsByKey.containsKey(hold.key())) {
-            requireSufficientFunds(hold);
-        }
-        record(hold.place());
     }
 
     private void recordReversal(IdempotencyKey key) {
@@ -169,14 +162,6 @@ public final class InMemoryLedger implements Ledger {
             changes.merge(entry.account(), signedAmount(entry, entry.account().normalBalance()), Money::add);
         }
         return changes;
-    }
-
-    private void requireSufficientFunds(Hold hold) {
-        Account available = hold.account().available();
-        Money availableBalance = calculateBalance(available);
-        if (availableBalance.isLessThan(hold.amount())) {
-            throw new InsufficientFundsException(available.id(), availableBalance, hold.amount());
-        }
     }
 
     private static void requireSameTransaction(Transaction existing, Transaction incoming) {
