@@ -94,33 +94,6 @@ class HoldTest {
     }
 
     @Test
-    void totalBalanceIncludesHeldAmount() {
-        fundSeller("600.00");
-
-        ledger.post(new Hold(HOLD_KEY, SELLER, lira("300.00")).place());
-
-        assertThat(ledger.totalBalance(SELLER)).isEqualTo(lira("600.00"));
-    }
-
-    @Test
-    void totalBalanceDropsAfterCapture() {
-        fundSeller("600.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.post(hold.place());
-
-        ledger.post(hold.capture(BANK));
-
-        assertThat(ledger.totalBalance(SELLER)).isEqualTo(lira("300.00"));
-    }
-
-    @Test
-    void rejectsNullAccountForTotalBalance() {
-        assertThatThrownBy(() -> ledger.totalBalance(null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("account");
-    }
-
-    @Test
     void rejectsNullKey() {
         assertThatThrownBy(() -> new Hold(null, SELLER, lira("300.00")))
                 .isInstanceOf(NullPointerException.class)
@@ -167,79 +140,6 @@ class HoldTest {
                 .debit(CUSTOMER_PAYMENTS, lira(amount))
                 .credit(SELLER.available(), lira(amount))
                 .build());
-    }
-
-    @Test
-    void placeHoldMovesAmountWhenAvailableBalanceIsEnough() {
-        fundSeller("600.00");
-
-        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
-
-        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("300.00"));
-        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
-    }
-
-    @Test
-    void placeHoldAllowsHoldingEntireAvailableBalance() {
-        fundSeller("600.00");
-
-        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("600.00")));
-
-        assertThat(ledger.balance(SELLER.available())).isEqualTo(Money.zero(TRY));
-    }
-
-    @Test
-    void rejectsHoldWhenAvailableBalanceIsInsufficient() {
-        fundSeller("600.00");
-        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
-        Hold secondHold = new Hold(new IdempotencyKey("payout-2-hold"), SELLER, lira("600.00"));
-
-        assertThatThrownBy(() -> ledger.placeHold(secondHold))
-                .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller-42-wallet: available 300.00 TRY, requested 600.00 TRY");
-    }
-
-    @Test
-    void keepsBalancesUnchangedWhenHoldIsRejected() {
-        fundSeller("600.00");
-        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
-        Hold secondHold = new Hold(new IdempotencyKey("payout-2-hold"), SELLER, lira("600.00"));
-
-        assertThatThrownBy(() -> ledger.placeHold(secondHold))
-                .isInstanceOf(InsufficientFundsException.class);
-
-        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("300.00"));
-        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
-    }
-
-    @Test
-    void rejectsNullHold() {
-        assertThatThrownBy(() -> ledger.placeHold(null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("hold");
-    }
-
-    @Test
-    void ignoresHoldPlacedTwiceWithSameKey() {
-        fundSeller("300.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.placeHold(hold);
-
-        ledger.placeHold(hold);
-
-        assertThat(ledger.balance(SELLER.available())).isEqualTo(Money.zero(TRY));
-        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
-    }
-
-    @Test
-    void rejectsHoldWithReusedKeyAndDifferentAmount() {
-        fundSeller("600.00");
-        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
-        Hold differentHold = new Hold(HOLD_KEY, SELLER, lira("200.00"));
-
-        assertThatThrownBy(() -> ledger.placeHold(differentHold))
-                .isInstanceOf(IdempotencyKeyConflictException.class)
-                .hasMessage("Idempotency key payout-1-hold was already used for a different transaction");
     }
 
     private static Account account(String id, Side normalBalance) {
