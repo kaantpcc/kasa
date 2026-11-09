@@ -434,6 +434,15 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void reportsRejectedTransactionAsLedgerException() {
+        fundSeller("200.00");
+        Transaction tooLargePayout = payout("payout-1", SELLER_WALLET, "1000.00");
+
+        assertThatThrownBy(() -> ledger.post(tooLargePayout))
+                .isInstanceOf(LedgerException.class);
+    }
+
+    @Test
     void writesNothingWhenTransactionBreaksBalancePolicy() {
         fundSeller("200.00");
         Transaction tooLargePayout = payout("payout-1", SELLER_WALLET, "1000.00");

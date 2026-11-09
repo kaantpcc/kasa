@@ -1,7 +1,6 @@
 package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
-import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
@@ -19,8 +18,7 @@ import java.util.function.Supplier;
 
 public final class InMemoryLedger implements Ledger {
 
-    private final Map<AccountId, Account> accountsById = new HashMap<>();
-    private final Map<AccountId, AccountStatus> statusesById = new HashMap<>();
+    private final AccountRegistry accounts = new AccountRegistry();
     private final List<Entry> entries = new ArrayList<>();
     private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -28,25 +26,25 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void open(Account account) {
         Objects.requireNonNull(account, "account");
-        write(() -> recordAccount(account));
+        write(() -> accounts.open(account));
     }
 
     @Override
     public void freeze(Account account) {
         Objects.requireNonNull(account, "account");
-        write(() -> changeStatus(account, AccountStatus.FROZEN));
+        write(() -> accounts.freeze(account));
     }
 
     @Override
     public void unfreeze(Account account) {
         Objects.requireNonNull(account, "account");
-        write(() -> changeStatus(account, AccountStatus.OPEN));
+        write(() -> accounts.unfreeze(account));
     }
 
     @Override
     public void close(Account account) {
         Objects.requireNonNull(account, "account");
-        write(() -> changeStatus(account, AccountStatus.CLOSED));
+        write(() -> accounts.close(account, calculateBalance(account)));
     }
 
     @Override
@@ -88,46 +86,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public AccountStatus status(Account account) {
         Objects.requireNonNull(account, "account");
-        return read(() -> statusOf(account));
-    }
-
-    private void recordAccount(Account account) {
-        if (accountsById.containsKey(account.id())) {
-            requireSameDefinition(account);
-            requireNotClosed(account);
-            return;
-        }
-        accountsById.put(account.id(), account);
-        statusesById.put(account.id(), AccountStatus.OPEN);
-    }
-
-    private void changeStatus(Account account, AccountStatus target) {
-        if (statusOf(account) == target) {
-            return;
-        }
-        requireNotClosed(account);
-        if (target == AccountStatus.CLOSED) {
-            requireZeroBalance(account);
-        }
-        statusesById.put(account.id(), target);
-    }
-
-    private void requireNotClosed(Account account) {
-        if (statusesById.get(account.id()) == AccountStatus.CLOSED) {
-            throw new AccountClosedException(account.id());
-        }
-    }
-
-    private void requireZeroBalance(Account account) {
-        Money balance = calculateBalance(account);
-        if (!balance.isZero()) {
-            throw new NonZeroBalanceException(account.id(), balance);
-        }
-    }
-
-    private AccountStatus statusOf(Account account) {
-        requireOpened(account);
-        return statusesById.get(account.id());
+        return read(() -> accounts.statusOf(account));
     }
 
     private void record(Transaction transaction) {
@@ -137,7 +96,7 @@ public final class InMemoryLedger implements Ledger {
         }
         requireOpenedAccounts(transaction);
         Map<Account, Money> changes = balanceChanges(transaction);
-        changes.forEach(this::requireStatusAllows);
+        changes.forEach(accounts::requireMovementAllowed);
         changes.forEach(this::requireWithinPolicy);
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
@@ -151,7 +110,7 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private Money calculateBalance(Account account) {
-        requireOpened(account);
+        accounts.requireOpened(account);
         Money balance = Money.zero(account.currency());
         for (Entry entry : entries) {
             if (entry.account().equals(account)) {
@@ -162,7 +121,7 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private List<Entry> entriesOf(Account account) {
-        requireOpened(account);
+        accounts.requireOpened(account);
         List<Entry> accountEntries = new ArrayList<>();
         for (Entry entry : entries) {
             if (entry.account().equals(account)) {
@@ -174,35 +133,7 @@ public final class InMemoryLedger implements Ledger {
 
     private void requireOpenedAccounts(Transaction transaction) {
         for (Entry entry : transaction.entries()) {
-            requireOpened(entry.account());
-        }
-    }
-
-    private void requireOpened(Account account) {
-        if (!accountsById.containsKey(account.id())) {
-            throw new AccountNotOpenException(account.id());
-        }
-        requireSameDefinition(account);
-    }
-
-    private void requireSameDefinition(Account account) {
-        if (!accountsById.get(account.id()).equals(account)) {
-            throw new AccountDefinitionConflictException(account.id());
-        }
-    }
-
-    private void requireStatusAllows(Account account, Money balanceChange) {
-        switch (statusesById.get(account.id())) {
-            case OPEN -> {
-            }
-            case FROZEN -> requireNoOutgoingMoney(account, balanceChange);
-            case CLOSED -> throw new AccountClosedException(account.id());
-        }
-    }
-
-    private static void requireNoOutgoingMoney(Account account, Money balanceChange) {
-        if (balanceChange.isNegative()) {
-            throw new AccountFrozenException(account.id());
+            accounts.requireOpened(entry.account());
         }
     }
 
