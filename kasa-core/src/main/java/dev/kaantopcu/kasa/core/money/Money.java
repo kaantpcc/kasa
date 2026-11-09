@@ -80,4 +80,12 @@ public record Money(BigDecimal amount, Currency currency) {
         requireSameCurrency(other);
         return amount.compareTo(other.amount) < 0;
     }
+
+    public Money multiply(BigDecimal rate, RoundingMode roundingMode) {
+        Objects.requireNonNull(rate, "rate");
+        Objects.requireNonNull(roundingMode, "roundingMode");
+        BigDecimal product = amount.multiply(rate)
+                .setScale(currency.getDefaultFractionDigits(), roundingMode);
+        return new Money(product, currency);
+    }
 }

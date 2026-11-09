@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.Currency;
+import java.math.RoundingMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -227,5 +228,47 @@ class MoneyTest {
         assertThatThrownBy(() -> Money.of("1.00", TRY).isLessThan(null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("other");
+    }
+
+    @Test
+    void multipliesByRate() {
+        Money commission = Money.of("1000.00", TRY).multiply(new BigDecimal("0.10"), RoundingMode.HALF_EVEN);
+
+        assertThat(commission).isEqualTo(Money.of("100.00", TRY));
+    }
+
+    @Test
+    void roundsHalfUpWhenAsked() {
+        Money commission = Money.of("99.99", TRY).multiply(new BigDecimal("0.10"), RoundingMode.HALF_UP);
+
+        assertThat(commission).isEqualTo(Money.of("10.00", TRY));
+    }
+
+    @Test
+    void roundsDownWhenAsked() {
+        Money commission = Money.of("99.99", TRY).multiply(new BigDecimal("0.10"), RoundingMode.DOWN);
+
+        assertThat(commission).isEqualTo(Money.of("9.99", TRY));
+    }
+
+    @Test
+    void roundsHalfToEvenNeighbour() {
+        Money half = Money.of("10.05", TRY).multiply(new BigDecimal("0.5"), RoundingMode.HALF_EVEN);
+
+        assertThat(half).isEqualTo(Money.of("5.02", TRY));
+    }
+
+    @Test
+    void rejectsNullRate() {
+        assertThatThrownBy(() -> Money.of("1.00", TRY).multiply(null, RoundingMode.HALF_EVEN))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("rate");
+    }
+
+    @Test
+    void rejectsNullRoundingMode() {
+        assertThatThrownBy(() -> Money.of("1.00", TRY).multiply(new BigDecimal("0.10"), null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("roundingMode");
     }
 }
