@@ -11,51 +11,84 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 public final class InMemoryLedger implements LedgerWriter, LedgerReader {
 
     private final List<Entry> entries = new ArrayList<>();
     private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     @Override
-    public synchronized void post(Transaction transaction) {
+    public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
-        record(transaction);
+        lock.writeLock().lock();
+        try {
+            record(transaction);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     @Override
-    public synchronized void placeHold(Hold hold) {
+    public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
-        if (!transactionsByKey.containsKey(hold.key())) {
-            requireSufficientFunds(hold);
+        lock.writeLock().lock();
+        try {
+            if (!transactionsByKey.containsKey(hold.key())) {
+                requireSufficientFunds(hold);
+            }
+            record(hold.place());
+        } finally {
+            lock.writeLock().unlock();
         }
-        record(hold.place());
     }
 
     @Override
-    public synchronized void reverse(IdempotencyKey key) {
+    public void reverse(IdempotencyKey key) {
         Objects.requireNonNull(key, "key");
-        if (!transactionsByKey.containsKey(key)) {
-            throw new TransactionNotFoundException(key);
+        lock.writeLock().lock();
+        try {
+            if (!transactionsByKey.containsKey(key)) {
+                throw new TransactionNotFoundException(key);
+            }
+            record(transactionsByKey.get(key).reversed());
+        } finally {
+            lock.writeLock().unlock();
         }
-        record(transactionsByKey.get(key).reversed());
     }
 
     @Override
-    public synchronized Money balance(Account account) {
+    public Money balance(Account account) {
         Objects.requireNonNull(account, "account");
-        return calculateBalance(account);
+        lock.readLock().lock();
+        try {
+            return calculateBalance(account);
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
-    public synchronized List<Entry> statement(Account account) {
+    public List<Entry> statement(Account account) {
         Objects.requireNonNull(account, "account");
-        return entriesOf(account);
+        lock.readLock().lock();
+        try {
+            return entriesOf(account);
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override
-    public synchronized Money totalBalance(HoldableAccount account) {
+    public Money totalBalance(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
-        return calculateBalance(account.available()).add(calculateBalance(account.held()));
+        lock.readLock().lock();
+        try {
+            return calculateBalance(account.available()).add(calculateBalance(account.held()));
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     private void record(Transaction transaction) {

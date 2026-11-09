@@ -11,6 +11,9 @@ import java.util.Currency;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class InMemoryLedgerConcurrencyTest {
@@ -53,6 +56,17 @@ class InMemoryLedgerConcurrencyTest {
 
         assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
         assertThat(ledger.balance(SELLER.available())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void releasesLockWhenOperationFails() throws InterruptedException {
+        assertThatThrownBy(() -> ledger.reverse(new IdempotencyKey("order-999")))
+                .isInstanceOf(TransactionNotFoundException.class);
+
+        Thread anotherRequest = Thread.ofVirtual().start(() -> ledger.post(sale("order-1")));
+        boolean finished = anotherRequest.join(Duration.ofSeconds(5));
+
+        assertThat(finished).isTrue();
     }
 
     private static Transaction sale(String orderKey) {
