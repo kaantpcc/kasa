@@ -122,7 +122,9 @@ public final class InMemoryLedger implements Ledger {
             return;
         }
         requireOpenedAccounts(transaction);
-        requireBalancePolicies(transaction);
+        Map<Account, Money> changes = balanceChanges(transaction);
+        changes.forEach(this::requireStatusAllows);
+        changes.forEach(this::requireWithinPolicy);
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
     }
@@ -175,8 +177,10 @@ public final class InMemoryLedger implements Ledger {
         }
     }
 
-    private void requireBalancePolicies(Transaction transaction) {
-        balanceChanges(transaction).forEach(this::requireWithinPolicy);
+    private void requireStatusAllows(Account account, Money balanceChange) {
+        if (statusesById.get(account.id()) == AccountStatus.FROZEN && balanceChange.isNegative()) {
+            throw new AccountFrozenException(account.id());
+        }
     }
 
     private void requireWithinPolicy(Account account, Money balanceChange) {
