@@ -8,14 +8,22 @@ import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Map;
+import java.util.HashMap;
 
 public final class InMemoryLedger implements LedgerWriter, LedgerReader {
 
     private final List<Entry> entries = new ArrayList<>();
+    private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
 
     @Override
+
     public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
+        if (transactionsByKey.containsKey(transaction.idempotencyKey())) {
+            return;
+        }
+        transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
     }
 

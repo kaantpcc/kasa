@@ -56,6 +56,24 @@ class InMemoryLedgerTest {
     }
 
     @Test
+    void ignoresTransactionPostedTwiceWithSameKey() {
+        ledger.post(sale("order-1"));
+
+        ledger.post(sale("order-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void keepsSingleCopyOfEntriesWhenTransactionIsPostedTwice() {
+        ledger.post(sale("order-1"));
+
+        ledger.post(sale("order-1"));
+
+        assertThat(ledger.statement(SELLER_WALLET)).hasSize(1);
+    }
+
+    @Test
     void ignoresEntriesOfAnotherAccounts() {
         ledger.post(sale("order-1"));
 
