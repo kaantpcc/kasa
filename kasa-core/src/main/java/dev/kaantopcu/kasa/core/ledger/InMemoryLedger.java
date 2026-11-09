@@ -13,6 +13,8 @@ import java.util.Objects;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import java.util.function.Supplier;
+
 public final class InMemoryLedger implements LedgerWriter, LedgerReader {
 
     private final List<Entry> entries = new ArrayList<>();
@@ -22,73 +24,37 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     @Override
     public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
-        lock.writeLock().lock();
-        try {
-            record(transaction);
-        } finally {
-            lock.writeLock().unlock();
-        }
+        write(() -> record(transaction));
     }
 
     @Override
     public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
-        lock.writeLock().lock();
-        try {
-            if (!transactionsByKey.containsKey(hold.key())) {
-                requireSufficientFunds(hold);
-            }
-            record(hold.place());
-        } finally {
-            lock.writeLock().unlock();
-        }
+        write(() -> recordHold(hold));
     }
 
     @Override
     public void reverse(IdempotencyKey key) {
         Objects.requireNonNull(key, "key");
-        lock.writeLock().lock();
-        try {
-            if (!transactionsByKey.containsKey(key)) {
-                throw new TransactionNotFoundException(key);
-            }
-            record(transactionsByKey.get(key).reversed());
-        } finally {
-            lock.writeLock().unlock();
-        }
+        write(() -> recordReversal(key));
     }
 
     @Override
     public Money balance(Account account) {
         Objects.requireNonNull(account, "account");
-        lock.readLock().lock();
-        try {
-            return calculateBalance(account);
-        } finally {
-            lock.readLock().unlock();
-        }
+        return read(() -> calculateBalance(account));
     }
 
     @Override
     public List<Entry> statement(Account account) {
         Objects.requireNonNull(account, "account");
-        lock.readLock().lock();
-        try {
-            return entriesOf(account);
-        } finally {
-            lock.readLock().unlock();
-        }
+        return read(() -> entriesOf(account));
     }
 
     @Override
     public Money totalBalance(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
-        lock.readLock().lock();
-        try {
-            return calculateBalance(account.available()).add(calculateBalance(account.held()));
-        } finally {
-            lock.readLock().unlock();
-        }
+        return read(() -> calculateBalance(account.available()).add(calculateBalance(account.held())));
     }
 
     private void record(Transaction transaction) {
@@ -98,6 +64,20 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
         }
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
+    }
+
+    private void recordHold(Hold hold) {
+        if (!transactionsByKey.containsKey(hold.key())) {
+            requireSufficientFunds(hold);
+        }
+        record(hold.place());
+    }
+
+    private void recordReversal(IdempotencyKey key) {
+        if (!transactionsByKey.containsKey(key)) {
+            throw new TransactionNotFoundException(key);
+        }
+        record(transactionsByKey.get(key).reversed());
     }
 
     private Money calculateBalance(Account account) {
@@ -131,6 +111,24 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     private static void requireSameTransaction(Transaction existing, Transaction incoming) {
         if (!existing.equals(incoming)) {
             throw new IdempotencyKeyConflictException(incoming.idempotencyKey());
+        }
+    }
+
+    private <T> T read(Supplier<T> action) {
+        lock.readLock().lock();
+        try {
+            return action.get();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    private void write(Runnable action) {
+        lock.writeLock().lock();
+        try {
+            action.run();
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
