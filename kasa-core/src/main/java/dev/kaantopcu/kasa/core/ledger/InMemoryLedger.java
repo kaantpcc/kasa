@@ -103,7 +103,7 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     private void requireSufficientFunds(Hold hold) {
         Account available = hold.account().available();
         Money availableBalance = calculateBalance(available);
-        if (availableBalance.subtract(hold.amount()).isNegative()) {
+        if (availableBalance.isLessThan(hold.amount())) {
             throw new InsufficientFundsException(available.id(), availableBalance, hold.amount());
         }
     }
