@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
@@ -10,6 +11,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Currency;
 
+import static dev.kaantopcu.kasa.core.account.BalancePolicy.nonNegative;
+import static dev.kaantopcu.kasa.core.account.BalancePolicy.overdraft;
+import static dev.kaantopcu.kasa.core.account.BalancePolicy.unlimited;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -17,13 +21,13 @@ abstract class LedgerContractTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
-    private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
-    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT);
-    private static final Account COMMISSION = account("commission", Side.CREDIT);
-    private static final Account BANK = account("bank", Side.DEBIT);
+    private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
+    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT, nonNegative());
+    private static final Account COMMISSION = account("commission", Side.CREDIT, unlimited());
+    private static final Account BANK = account("bank", Side.DEBIT, unlimited());
     private static final HoldableAccount SELLER = new HoldableAccount(
             SELLER_WALLET,
-            account("seller-42-wallet-held", Side.CREDIT));
+            account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private Ledger ledger;
@@ -353,9 +357,18 @@ abstract class LedgerContractTest {
 
     @Test
     void rejectsOpeningSameIdWithDifferentDefinition() {
-        Account sellerWalletInUsd = new Account(new AccountId("seller-42-wallet"), USD, Side.CREDIT);
+        Account sellerWalletInUsd = new Account(new AccountId("seller-42-wallet"), USD, Side.CREDIT, nonNegative());
 
         assertThatThrownBy(() -> ledger.open(sellerWalletInUsd))
+                .isInstanceOf(AccountDefinitionConflictException.class)
+                .hasMessage("Account seller-42-wallet is already open with a different definition");
+    }
+
+    @Test
+    void rejectsOpeningSameIdWithDifferentBalancePolicy() {
+        Account sellerWalletWithOverdraft = account("seller-42-wallet", Side.CREDIT, overdraft(lira("500.00")));
+
+        assertThatThrownBy(() -> ledger.open(sellerWalletWithOverdraft))
                 .isInstanceOf(AccountDefinitionConflictException.class)
                 .hasMessage("Account seller-42-wallet is already open with a different definition");
     }
@@ -373,7 +386,7 @@ abstract class LedgerContractTest {
     void rejectsTransactionUsingDifferentDefinitionOfOpenAccount() {
         Transaction withWrongDefinition = Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
-                .credit(account("seller-42-wallet", Side.DEBIT), lira("900.00"))
+                .credit(account("seller-42-wallet", Side.DEBIT, nonNegative()), lira("900.00"))
                 .build();
 
         assertThatThrownBy(() -> ledger.post(withWrongDefinition))
@@ -383,7 +396,7 @@ abstract class LedgerContractTest {
 
     @Test
     void rejectsBalanceOfAccountThatIsNotOpen() {
-        assertThatThrownBy(() -> ledger.balance(account("seler-42-wallet", Side.CREDIT)))
+        assertThatThrownBy(() -> ledger.balance(account("seler-42-wallet", Side.CREDIT, nonNegative())))
                 .isInstanceOf(AccountNotOpenException.class)
                 .hasMessage("Account seler-42-wallet has not been opened");
     }
@@ -413,12 +426,12 @@ abstract class LedgerContractTest {
     private static Transaction saleToMisspelledWallet() {
         return Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
-                .credit(account("seler-42-wallet", Side.CREDIT), lira("900.00"))
+                .credit(account("seler-42-wallet", Side.CREDIT, nonNegative()), lira("900.00"))
                 .build();
     }
 
-    private static Account account(String id, Side normalBalance) {
-        return new Account(new AccountId(id), TRY, normalBalance);
+    private static Account account(String id, Side normalBalance, BalancePolicy balancePolicy) {
+        return new Account(new AccountId(id), TRY, normalBalance, balancePolicy);
     }
 
     private static Money lira(String amount) {

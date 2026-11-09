@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Currency;
 
+import static dev.kaantopcu.kasa.core.account.BalancePolicy.nonNegative;
+import static dev.kaantopcu.kasa.core.account.BalancePolicy.unlimited;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -19,11 +22,11 @@ class HoldTest {
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
 
-    private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
-    private static final Account BANK = account("bank", Side.DEBIT);
+    private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
+    private static final Account BANK = account("bank", Side.DEBIT, unlimited());
     private static final HoldableAccount SELLER = new HoldableAccount(
-            account("seller-42-wallet", Side.CREDIT),
-            account("seller-42-wallet-held", Side.CREDIT));
+            account("seller-42-wallet", Side.CREDIT, nonNegative()),
+            account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private final InMemoryLedger ledger = new InMemoryLedger();
@@ -151,8 +154,8 @@ class HoldTest {
                 .build());
     }
 
-    private static Account account(String id, Side normalBalance) {
-        return new Account(new AccountId(id), TRY, normalBalance);
+    private static Account account(String id, Side normalBalance, BalancePolicy balancePolicy) {
+        return new Account(new AccountId(id), TRY, normalBalance, balancePolicy);
     }
 
     private static Money lira(String amount) {

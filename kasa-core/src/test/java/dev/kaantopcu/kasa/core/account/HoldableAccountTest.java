@@ -1,6 +1,7 @@
 package dev.kaantopcu.kasa.core.account;
 
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
+import dev.kaantopcu.kasa.core.money.Money;
 import org.junit.jupiter.api.Test;
 
 import java.util.Currency;
@@ -12,11 +13,12 @@ class HoldableAccountTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
+    private static final AccountId HELD_ID = new AccountId("seller-42-wallet-held");
 
     private static final Account SELLER_WALLET =
-            new Account(new AccountId("seller-42-wallet"), TRY, Side.CREDIT);
+            new Account(new AccountId("seller-42-wallet"), TRY, Side.CREDIT, BalancePolicy.nonNegative());
     private static final Account SELLER_WALLET_HELD =
-            new Account(new AccountId("seller-42-wallet-held"), TRY, Side.CREDIT);
+            new Account(HELD_ID, TRY, Side.CREDIT, BalancePolicy.nonNegative());
 
     @Test
     void createsHoldableAccountWithAvailableAndHeldAccounts() {
@@ -49,7 +51,7 @@ class HoldableAccountTest {
 
     @Test
     void rejectsHeldAccountInDifferentCurrency() {
-        Account heldInUsd = new Account(new AccountId("seller-42-wallet-held"), USD, Side.CREDIT);
+        Account heldInUsd = new Account(HELD_ID, USD, Side.CREDIT, BalancePolicy.nonNegative());
 
         assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, heldInUsd))
                 .isInstanceOf(CurrencyMismatchException.class)
@@ -58,10 +60,28 @@ class HoldableAccountTest {
 
     @Test
     void rejectsHeldAccountWithDifferentNormalBalance() {
-        Account heldOnOtherSide = new Account(new AccountId("seller-42-wallet-held"), TRY, Side.DEBIT);
+        Account heldOnOtherSide = new Account(HELD_ID, TRY, Side.DEBIT, BalancePolicy.nonNegative());
 
         assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, heldOnOtherSide))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Held account must have the same normal balance as available account");
+    }
+
+    @Test
+    void rejectsUnlimitedHeldAccount() {
+        Account unlimitedHeld = new Account(HELD_ID, TRY, Side.CREDIT, BalancePolicy.unlimited());
+
+        assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, unlimitedHeld))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Held account seller-42-wallet-held must have a non-negative balance policy");
+    }
+
+    @Test
+    void rejectsHeldAccountWithOverdraft() {
+        Account heldWithOverdraft = new Account(HELD_ID, TRY, Side.CREDIT, BalancePolicy.overdraft(Money.of("500.00", TRY)));
+
+        assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, heldWithOverdraft))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Held account seller-42-wallet-held must have a non-negative balance policy");
     }
 }
