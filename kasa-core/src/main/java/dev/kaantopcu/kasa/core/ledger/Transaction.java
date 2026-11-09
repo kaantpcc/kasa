@@ -13,6 +13,8 @@ import java.util.ArrayList;
 
 public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries) {
 
+    private static final String REVERSAL_SUFFIX = ":reversal";
+
     public Transaction {
         Objects.requireNonNull(idempotencyKey, "idempotencyKey");
         Objects.requireNonNull(entries, "entries");
@@ -46,6 +48,14 @@ public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries) {
             case DEBIT -> entry.amount();
             case CREDIT -> entry.amount().negate();
         };
+    }
+
+    public Transaction reversed() {
+        List<Entry> reversedEntries = new ArrayList<>();
+        for (Entry entry : entries) {
+            reversedEntries.add(entry.reversed());
+        }
+        return new Transaction(new IdempotencyKey(idempotencyKey.value() + REVERSAL_SUFFIX), reversedEntries);
     }
 
     public static Builder builder(String idempotencyKey) {

@@ -146,6 +146,31 @@ class TransactionTest {
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
+    @Test
+    void reversedTransactionFlipsEveryEntry() {
+        Transaction original = new Transaction(ORDER_KEY, List.of(
+                debit(CUSTOMER_PAYMENTS, "1000.00"),
+                credit(SELLER_WALLET, "900.00"),
+                credit(COMMISSION, "100.00")));
+
+        Transaction reversal = original.reversed();
+
+        assertThat(reversal.entries()).containsExactly(
+                credit(CUSTOMER_PAYMENTS, "1000.00"),
+                debit(SELLER_WALLET, "900.00"),
+                debit(COMMISSION, "100.00"));
+    }
+
+    @Test
+    void reversedTransactionUsesSuffixedKey() {
+        Transaction original = new Transaction(ORDER_KEY, List.of(
+                debit(CUSTOMER_PAYMENTS, "100.00"),
+                credit(SELLER_WALLET, "100.00")));
+
+        assertThat(original.reversed().idempotencyKey())
+                .isEqualTo(new IdempotencyKey("order-123:reversal"));
+    }
+
     private static Account account(String id, Currency currency, Side normalBalance) {
         return new Account(new AccountId(id), currency, normalBalance);
     }

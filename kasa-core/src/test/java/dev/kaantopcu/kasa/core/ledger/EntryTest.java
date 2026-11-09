@@ -77,4 +77,13 @@ class EntryTest {
 
         assertThat(withdrawal.side()).isEqualTo(Side.DEBIT);
     }
+
+    @Test
+    void reversedEntryHasOppositeSideAndSameAmount() {
+        Entry entry = new Entry(SELLER_WALLET, Money.of("900.00", TRY), Side.CREDIT);
+
+        Entry reversed = entry.reversed();
+
+        assertThat(reversed).isEqualTo(new Entry(SELLER_WALLET, Money.of("900.00", TRY), Side.DEBIT));
+    }
 }
