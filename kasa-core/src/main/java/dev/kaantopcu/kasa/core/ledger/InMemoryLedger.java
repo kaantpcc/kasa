@@ -17,10 +17,10 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
 
     @Override
-
     public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
         if (transactionsByKey.containsKey(transaction.idempotencyKey())) {
+            requireSameTransaction(transactionsByKey.get(transaction.idempotencyKey()), transaction);
             return;
         }
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
@@ -69,6 +69,12 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
         Money availableBalance = balance(available);
         if (availableBalance.subtract(hold.amount()).isNegative()) {
             throw new InsufficientFundsException(available.id(), availableBalance, hold.amount());
+        }
+    }
+
+    private static void requireSameTransaction(Transaction existing, Transaction incoming) {
+        if (!existing.equals(incoming)) {
+            throw new IdempotencyKeyConflictException(incoming.idempotencyKey());
         }
     }
 

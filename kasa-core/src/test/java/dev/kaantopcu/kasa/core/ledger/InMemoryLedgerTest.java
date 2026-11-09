@@ -74,6 +74,33 @@ class InMemoryLedgerTest {
     }
 
     @Test
+    void rejectsSameKeyUsedForDifferentTransaction() {
+        ledger.post(sale("order-1"));
+        Transaction differentOrder = Transaction.builder("order-1")
+                .debit(CUSTOMER_PAYMENTS, lira("500.00"))
+                .credit(SELLER_WALLET, lira("500.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(differentOrder))
+                .isInstanceOf(IdempotencyKeyConflictException.class)
+                .hasMessage("Idempotency key order-1 was already used for a different transaction");
+    }
+
+    @Test
+    void keepsOriginalTransactionWhenKeyConflicts() {
+        ledger.post(sale("order-1"));
+        Transaction differentOrder = Transaction.builder("order-1")
+                .debit(CUSTOMER_PAYMENTS, lira("500.00"))
+                .credit(SELLER_WALLET, lira("500.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(differentOrder))
+                .isInstanceOf(IdempotencyKeyConflictException.class);
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("900.00"));
+    }
+
+    @Test
     void ignoresEntriesOfAnotherAccounts() {
         ledger.post(sale("order-1"));
 
