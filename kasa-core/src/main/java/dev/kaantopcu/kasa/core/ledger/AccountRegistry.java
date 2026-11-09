@@ -5,12 +5,15 @@ import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.money.Money;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 final class AccountRegistry {
 
-    private final Map<AccountId, Account> accountsById = new HashMap<>();
+    private final Map<AccountId, Account> accountsById = new LinkedHashMap<>();
     private final Map<AccountId, AccountStatus> statusesById = new HashMap<>();
 
     void open(Account account) {
@@ -42,6 +45,19 @@ final class AccountRegistry {
     AccountStatus statusOf(Account account) {
         requireOpened(account);
         return statusesById.get(account.id());
+    }
+
+    List<Account> accountsWithin(AccountId branch) {
+        List<Account> branchAccounts = new ArrayList<>();
+        for (Account account : accountsById.values()) {
+            if (account.id().isWithin(branch)) {
+                branchAccounts.add(account);
+            }
+        }
+        if (branchAccounts.isEmpty()) {
+            throw new AccountNotOpenException(branch);
+        }
+        return branchAccounts;
     }
 
     void requireOpened(Account account) {

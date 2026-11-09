@@ -1,6 +1,7 @@
 package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
+import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.Money;
@@ -14,6 +15,8 @@ public interface LedgerReader {
     List<Entry> statement(Account account);
 
     Money totalBalance(HoldableAccount account);
+
+    Money balanceUnder(AccountId branch);
 
     AccountStatus status(Account account);
 }
