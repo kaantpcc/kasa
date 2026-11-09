@@ -17,7 +17,7 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
 
     @Override
-    public void post(Transaction transaction) {
+    public synchronized void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
         if (transactionsByKey.containsKey(transaction.idempotencyKey())) {
             requireSameTransaction(transactionsByKey.get(transaction.idempotencyKey()), transaction);
@@ -28,7 +28,7 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     }
 
     @Override
-    public void placeHold(Hold hold) {
+    public synchronized void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
         if (!transactionsByKey.containsKey(hold.key())) {
             requireSufficientFunds(hold);
@@ -37,7 +37,7 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     }
 
     @Override
-    public void reverse(IdempotencyKey key) {
+    public synchronized void reverse(IdempotencyKey key) {
         Objects.requireNonNull(key, "key");
         if (!transactionsByKey.containsKey(key)) {
             throw new TransactionNotFoundException(key);
@@ -46,7 +46,7 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     }
 
     @Override
-    public Money balance(Account account) {
+    public synchronized Money balance(Account account) {
         Objects.requireNonNull(account, "account");
         Money balance = Money.zero(account.currency());
         for (Entry entry : entries) {
@@ -58,7 +58,7 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     }
 
     @Override
-    public List<Entry> statement(Account account) {
+    public synchronized List<Entry> statement(Account account) {
         Objects.requireNonNull(account, "account");
         List<Entry> accountEntries = new ArrayList<>();
         for (Entry entry : entries) {
@@ -70,7 +70,7 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     }
 
     @Override
-    public Money totalBalance(HoldableAccount account) {
+    public synchronized Money totalBalance(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
         return balance(account.available()).add(balance(account.held()));
     }
