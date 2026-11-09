@@ -6,6 +6,12 @@ public interface LedgerWriter {
 
     void open(Account account);
 
+    void freeze(Account account);
+
+    void unfreeze(Account account);
+
+    void close(Account account);
+
     void post(Transaction transaction);
 
     void placeHold(Hold hold);

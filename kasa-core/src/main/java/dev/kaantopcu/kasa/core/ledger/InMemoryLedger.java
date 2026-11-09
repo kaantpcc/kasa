@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
@@ -19,6 +20,7 @@ import java.util.function.Supplier;
 public final class InMemoryLedger implements Ledger {
 
     private final Map<AccountId, Account> accountsById = new HashMap<>();
+    private final Map<AccountId, AccountStatus> statusesById = new HashMap<>();
     private final List<Entry> entries = new ArrayList<>();
     private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -27,6 +29,24 @@ public final class InMemoryLedger implements Ledger {
     public void open(Account account) {
         Objects.requireNonNull(account, "account");
         write(() -> recordAccount(account));
+    }
+
+    @Override
+    public void freeze(Account account) {
+        Objects.requireNonNull(account, "account");
+        write(() -> changeStatus(account, AccountStatus.FROZEN));
+    }
+
+    @Override
+    public void unfreeze(Account account) {
+        Objects.requireNonNull(account, "account");
+        write(() -> changeStatus(account, AccountStatus.OPEN));
+    }
+
+    @Override
+    public void close(Account account) {
+        Objects.requireNonNull(account, "account");
+        write(() -> changeStatus(account, AccountStatus.CLOSED));
     }
 
     @Override
@@ -65,12 +85,35 @@ public final class InMemoryLedger implements Ledger {
         return read(() -> calculateBalance(account.available()).add(calculateBalance(account.held())));
     }
 
+    @Override
+    public AccountStatus status(Account account) {
+        Objects.requireNonNull(account, "account");
+        return read(() -> statusOf(account));
+    }
+
     private void recordAccount(Account account) {
         if (accountsById.containsKey(account.id())) {
             requireSameDefinition(account);
             return;
         }
         accountsById.put(account.id(), account);
+        statusesById.put(account.id(), AccountStatus.OPEN);
+    }
+
+    private void changeStatus(Account account, AccountStatus target) {
+        AccountStatus current = statusOf(account);
+        if (current == target) {
+            return;
+        }
+        if (current == AccountStatus.CLOSED) {
+            throw new AccountClosedException(account.id());
+        }
+        statusesById.put(account.id(), target);
+    }
+
+    private AccountStatus statusOf(Account account) {
+        requireOpened(account);
+        return statusesById.get(account.id());
     }
 
     private void record(Transaction transaction) {
@@ -78,7 +121,7 @@ public final class InMemoryLedger implements Ledger {
             requireSameTransaction(transactionsByKey.get(transaction.idempotencyKey()), transaction);
             return;
         }
-        requireOpenAccounts(transaction);
+        requireOpenedAccounts(transaction);
         requireBalancePolicies(transaction);
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
@@ -92,7 +135,7 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private Money calculateBalance(Account account) {
-        requireOpen(account);
+        requireOpened(account);
         Money balance = Money.zero(account.currency());
         for (Entry entry : entries) {
             if (entry.account().equals(account)) {
@@ -103,7 +146,7 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private List<Entry> entriesOf(Account account) {
-        requireOpen(account);
+        requireOpened(account);
         List<Entry> accountEntries = new ArrayList<>();
         for (Entry entry : entries) {
             if (entry.account().equals(account)) {
@@ -113,13 +156,13 @@ public final class InMemoryLedger implements Ledger {
         return List.copyOf(accountEntries);
     }
 
-    private void requireOpenAccounts(Transaction transaction) {
+    private void requireOpenedAccounts(Transaction transaction) {
         for (Entry entry : transaction.entries()) {
-            requireOpen(entry.account());
+            requireOpened(entry.account());
         }
     }
 
-    private void requireOpen(Account account) {
+    private void requireOpened(Account account) {
         if (!accountsById.containsKey(account.id())) {
             throw new AccountNotOpenException(account.id());
         }
