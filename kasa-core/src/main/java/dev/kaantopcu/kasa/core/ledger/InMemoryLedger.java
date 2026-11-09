@@ -30,7 +30,9 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     @Override
     public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
-        requireSufficientFunds(hold);
+        if (!transactionsByKey.containsKey(hold.key())) {
+            requireSufficientFunds(hold);
+        }
         post(hold.place());
     }
 
