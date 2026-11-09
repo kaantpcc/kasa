@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Currency;
 import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 
 public record Money(BigDecimal amount, Currency currency) {
 
@@ -87,5 +89,34 @@ public record Money(BigDecimal amount, Currency currency) {
         BigDecimal product = amount.multiply(rate)
                 .setScale(currency.getDefaultFractionDigits(), roundingMode);
         return new Money(product, currency);
+    }
+
+    public List<Money> allocate(int parts) {
+        requirePositiveParts(parts);
+        requireNonNegativeAmount();
+        int digits = currency.getDefaultFractionDigits();
+        BigDecimal share = amount.divide(BigDecimal.valueOf(parts), digits, RoundingMode.DOWN);
+        BigDecimal remainder = amount.subtract(share.multiply(BigDecimal.valueOf(parts)));
+        int leftoverUnits = remainder.movePointRight(digits).intValueExact();
+        BigDecimal smallestUnit = BigDecimal.ONE.movePointLeft(digits);
+        List<Money> shares = new ArrayList<>();
+        for (int index = 0; index < parts; index++) {
+            BigDecimal extra = index < leftoverUnits ? smallestUnit : BigDecimal.ZERO;
+            shares.add(new Money(share.add(extra), currency));
+        }
+        return List.copyOf(shares);
+    }
+
+    private static void requirePositiveParts(int parts) {
+        if (parts <= 0) {
+            throw new IllegalArgumentException("Parts must be positive, got %d".formatted(parts));
+        }
+    }
+
+    private void requireNonNegativeAmount() {
+        if (isNegative()) {
+            throw new IllegalArgumentException("Cannot allocate a negative amount, got %s %s".formatted(
+                    amount.toPlainString(), currency.getCurrencyCode()));
+        }
     }
 }

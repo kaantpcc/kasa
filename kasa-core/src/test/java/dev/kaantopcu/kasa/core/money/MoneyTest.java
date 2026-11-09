@@ -6,6 +6,12 @@ import java.math.BigDecimal;
 import java.util.Currency;
 import java.math.RoundingMode;
 
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -270,5 +276,61 @@ class MoneyTest {
         assertThatThrownBy(() -> Money.of("1.00", TRY).multiply(new BigDecimal("0.10"), null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("roundingMode");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "100.00, 3",
+            "100.00, 7",
+            "999.99, 2",
+            "0.01, 3",
+            "0.00, 4"
+    })
+    void allocatedSharesAddUpToOriginalAmount(String amount, int parts) {
+        Money original = Money.of(amount, TRY);
+
+        List<Money> shares = original.allocate(parts);
+
+        Money total = Money.zero(TRY);
+        for (Money share : shares) {
+            total = total.add(share);
+        }
+        assertThat(shares).hasSize(parts);
+        assertThat(total).isEqualTo(original);
+    }
+
+    @Test
+    void givesLeftoverCentsToFirstShares() {
+        List<Money> shares = Money.of("100.00", TRY).allocate(3);
+
+        assertThat(shares).containsExactly(
+                Money.of("33.34", TRY),
+                Money.of("33.33", TRY),
+                Money.of("33.33", TRY));
+    }
+
+    @Test
+    void allocatesCurrencyWithoutFractionDigits() {
+        List<Money> shares = Money.of("100", JPY).allocate(3);
+
+        assertThat(shares).containsExactly(
+                Money.of("34", JPY),
+                Money.of("33", JPY),
+                Money.of("33", JPY));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1})
+    void rejectsNonPositiveParts(int parts) {
+        assertThatThrownBy(() -> Money.of("100.00", TRY).allocate(parts))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Parts must be positive, got " + parts);
+    }
+
+    @Test
+    void rejectsAllocatingNegativeAmount() {
+        assertThatThrownBy(() -> Money.of("-100.00", TRY).allocate(3))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Cannot allocate a negative amount, got -100.00 TRY");
     }
 }
