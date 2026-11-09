@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 abstract class LedgerContractTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
+    private static final Currency USD = Currency.getInstance("USD");
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
     private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT);
     private static final Account COMMISSION = account("commission", Side.CREDIT);
@@ -30,8 +31,13 @@ abstract class LedgerContractTest {
     protected abstract Ledger createLedger();
 
     @BeforeEach
-    void createEmptyLedger() {
+    void createLedgerWithOpenAccounts() {
         ledger = createLedger();
+        ledger.open(CUSTOMER_PAYMENTS);
+        ledger.open(SELLER_WALLET);
+        ledger.open(COMMISSION);
+        ledger.open(BANK);
+        ledger.open(SELLER.held());
     }
 
     @Test
@@ -315,6 +321,80 @@ abstract class LedgerContractTest {
                 .hasMessage("Idempotency key payout-1-hold was already used for a different transaction");
     }
 
+    @Test
+    void rejectsTransactionToAccountThatIsNotOpen() {
+        Transaction toMisspelledWallet = saleToMisspelledWallet();
+
+        assertThatThrownBy(() -> ledger.post(toMisspelledWallet))
+                .isInstanceOf(AccountNotOpenException.class)
+                .hasMessage("Account seler-42-wallet has not been opened");
+    }
+
+    @Test
+    void writesNothingWhenTransactionTouchesAccountThatIsNotOpen() {
+        Transaction toMisspelledWallet = saleToMisspelledWallet();
+
+        assertThatThrownBy(() -> ledger.post(toMisspelledWallet))
+                .isInstanceOf(AccountNotOpenException.class);
+
+        assertThat(ledger.balance(CUSTOMER_PAYMENTS)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void acceptsKeyOfRejectedTransactionForNextAttempt() {
+        Transaction toMisspelledWallet = saleToMisspelledWallet();
+        assertThatThrownBy(() -> ledger.post(toMisspelledWallet))
+                .isInstanceOf(AccountNotOpenException.class);
+
+        ledger.post(sale("order-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void rejectsOpeningSameIdWithDifferentDefinition() {
+        Account sellerWalletInUsd = new Account(new AccountId("seller-42-wallet"), USD, Side.CREDIT);
+
+        assertThatThrownBy(() -> ledger.open(sellerWalletInUsd))
+                .isInstanceOf(AccountDefinitionConflictException.class)
+                .hasMessage("Account seller-42-wallet is already open with a different definition");
+    }
+
+    @Test
+    void ignoresOpeningSameAccountTwice() {
+        ledger.post(sale("order-1"));
+
+        ledger.open(SELLER_WALLET);
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void rejectsTransactionUsingDifferentDefinitionOfOpenAccount() {
+        Transaction withWrongDefinition = Transaction.builder("order-1")
+                .debit(CUSTOMER_PAYMENTS, lira("900.00"))
+                .credit(account("seller-42-wallet", Side.DEBIT), lira("900.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(withWrongDefinition))
+                .isInstanceOf(AccountDefinitionConflictException.class)
+                .hasMessage("Account seller-42-wallet is already open with a different definition");
+    }
+
+    @Test
+    void rejectsBalanceOfAccountThatIsNotOpen() {
+        assertThatThrownBy(() -> ledger.balance(account("seler-42-wallet", Side.CREDIT)))
+                .isInstanceOf(AccountNotOpenException.class)
+                .hasMessage("Account seler-42-wallet has not been opened");
+    }
+
+    @Test
+    void rejectsNullAccountWhenOpening() {
+        assertThatThrownBy(() -> ledger.open(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("account");
+    }
+
     private void fundSeller(String amount) {
         ledger.post(Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira(amount))
@@ -327,6 +407,13 @@ abstract class LedgerContractTest {
                 .debit(CUSTOMER_PAYMENTS, lira("1000.00"))
                 .credit(SELLER_WALLET, lira("900.00"))
                 .credit(COMMISSION, lira("100.00"))
+                .build();
+    }
+
+    private static Transaction saleToMisspelledWallet() {
+        return Transaction.builder("order-1")
+                .debit(CUSTOMER_PAYMENTS, lira("900.00"))
+                .credit(account("seler-42-wallet", Side.CREDIT), lira("900.00"))
                 .build();
     }
 

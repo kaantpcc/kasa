@@ -33,8 +33,11 @@ abstract class LedgerConcurrencyContractTest {
     protected abstract Ledger createLedger();
 
     @BeforeEach
-    void createEmptyLedger() {
+    void createLedgerWithOpenAccounts() {
         ledger = createLedger();
+        ledger.open(CUSTOMER_PAYMENTS);
+        ledger.open(SELLER_WALLET);
+        ledger.open(SELLER.held());
     }
 
     @Test
