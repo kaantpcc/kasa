@@ -17,6 +17,10 @@ public record Entry(Account account, Money amount, Side side) {
         requireAccountCurrency(account, amount);
     }
 
+    public Entry reversed() {
+        return new Entry(account, amount, side.opposite());
+    }
+
     private static void requirePositive(Money amount) {
         if (!amount.isPositive()) {
             throw new InvalidEntryAmountException(amount);

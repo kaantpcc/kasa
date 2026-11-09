@@ -157,6 +157,51 @@ class InMemoryLedgerTest {
                 .hasMessage("account");
     }
 
+    @Test
+    void reversalCancelsOriginalTransaction() {
+        ledger.post(sale("order-1"));
+
+        ledger.reverse(new IdempotencyKey("order-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.balance(COMMISSION)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void keepsOriginalAndReversalEntriesInStatement() {
+        ledger.post(sale("order-1"));
+
+        ledger.reverse(new IdempotencyKey("order-1"));
+
+        assertThat(ledger.statement(SELLER_WALLET)).containsExactly(
+                new Entry(SELLER_WALLET, lira("900.00"), Side.CREDIT),
+                new Entry(SELLER_WALLET, lira("900.00"), Side.DEBIT));
+    }
+
+    @Test
+    void ignoresSecondReversalOfSameTransaction() {
+        ledger.post(sale("order-1"));
+        ledger.reverse(new IdempotencyKey("order-1"));
+
+        ledger.reverse(new IdempotencyKey("order-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void rejectsReversalOfUnknownTransaction() {
+        assertThatThrownBy(() -> ledger.reverse(new IdempotencyKey("order-999")))
+                .isInstanceOf(TransactionNotFoundException.class)
+                .hasMessage("No transaction posted with idempotency key order-999");
+    }
+
+    @Test
+    void rejectsNullKeyForReversal() {
+        assertThatThrownBy(() -> ledger.reverse(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("key");
+    }
+
     private static Transaction sale(String orderKey) {
         return Transaction.builder(orderKey)
                 .debit(CUSTOMER_PAYMENTS, lira("1000.00"))

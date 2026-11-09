@@ -37,6 +37,15 @@ public final class InMemoryLedger implements LedgerWriter, LedgerReader {
     }
 
     @Override
+    public void reverse(IdempotencyKey key) {
+        Objects.requireNonNull(key, "key");
+        if (!transactionsByKey.containsKey(key)) {
+            throw new TransactionNotFoundException(key);
+        }
+        post(transactionsByKey.get(key).reversed());
+    }
+
+    @Override
     public Money balance(Account account) {
         Objects.requireNonNull(account, "account");
         Money balance = Money.zero(account.currency());
