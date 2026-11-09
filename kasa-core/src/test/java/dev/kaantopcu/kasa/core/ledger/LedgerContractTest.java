@@ -28,6 +28,7 @@ abstract class LedgerContractTest {
     private static final HoldableAccount SELLER = new HoldableAccount(
             SELLER_WALLET,
             account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
+    private static final Account CREDIT_CUSTOMER = account("customer-7-wallet", Side.CREDIT, overdraft(lira("500.00")));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private Ledger ledger;
@@ -42,6 +43,7 @@ abstract class LedgerContractTest {
         ledger.open(COMMISSION);
         ledger.open(BANK);
         ledger.open(SELLER.held());
+        ledger.open(CREDIT_CUSTOMER);
     }
 
     @Test
@@ -408,11 +410,128 @@ abstract class LedgerContractTest {
                 .hasMessage("account");
     }
 
+    @Test
+    void allowsPayoutOfEntireNonNegativeBalance() {
+        fundSeller("200.00");
+
+        ledger.post(payout("payout-1", SELLER_WALLET, "200.00"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void rejectsPayoutLargerThanNonNegativeBalance() {
+        fundSeller("200.00");
+        Transaction tooLargePayout = payout("payout-1", SELLER_WALLET, "1000.00");
+
+        assertThatThrownBy(() -> ledger.post(tooLargePayout))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance in seller-42-wallet: available 200.00 TRY, requested 1000.00 TRY");
+    }
+
+    @Test
+    void writesNothingWhenTransactionBreaksBalancePolicy() {
+        fundSeller("200.00");
+        Transaction tooLargePayout = payout("payout-1", SELLER_WALLET, "1000.00");
+
+        assertThatThrownBy(() -> ledger.post(tooLargePayout))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("200.00"));
+        assertThat(ledger.balance(BANK)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void ignoresRetryOfAcceptedPayoutAfterBalanceReachedZero() {
+        fundSeller("200.00");
+        ledger.post(payout("payout-1", SELLER_WALLET, "200.00"));
+
+        ledger.post(payout("payout-1", SELLER_WALLET, "200.00"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void allowsUnlimitedAccountToGoNegative() {
+        fundSeller("300.00");
+
+        ledger.post(payout("payout-1", SELLER_WALLET, "300.00"));
+
+        assertThat(ledger.balance(BANK)).isEqualTo(lira("-300.00"));
+    }
+
+    @Test
+    void allowsOverdraftAccountToGoNegativeUpToItsLimit() {
+        ledger.post(payout("purchase-1", CREDIT_CUSTOMER, "500.00"));
+
+        assertThat(ledger.balance(CREDIT_CUSTOMER)).isEqualTo(lira("-500.00"));
+    }
+
+    @Test
+    void rejectsTransactionBeyondOverdraftLimit() {
+        depositToCreditCustomer("100.00");
+        Transaction beyondLimit = payout("purchase-1", CREDIT_CUSTOMER, "600.01");
+
+        assertThatThrownBy(() -> ledger.post(beyondLimit))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance in customer-7-wallet: available 600.00 TRY, requested 600.01 TRY");
+    }
+
+    @Test
+    void rejectsReleaseAfterCapture() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.placeHold(hold);
+        ledger.post(hold.capture(BANK));
+        Transaction release = hold.release();
+
+        assertThatThrownBy(() -> ledger.post(release))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance in seller-42-wallet-held: available 0.00 TRY, requested 300.00 TRY");
+    }
+
+    @Test
+    void rejectsCaptureAfterRelease() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.placeHold(hold);
+        ledger.post(hold.release());
+        Transaction capture = hold.capture(BANK);
+
+        assertThatThrownBy(() -> ledger.post(capture))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance in seller-42-wallet-held: available 0.00 TRY, requested 300.00 TRY");
+    }
+
+    @Test
+    void rejectsReversalThatWouldMakeBalanceNegative() {
+        ledger.post(sale("order-1"));
+        ledger.post(payout("payout-1", SELLER_WALLET, "900.00"));
+
+        assertThatThrownBy(() -> ledger.reverse(new IdempotencyKey("order-1")))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance in seller-42-wallet: available 0.00 TRY, requested 900.00 TRY");
+    }
+
     private void fundSeller(String amount) {
         ledger.post(Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira(amount))
                 .credit(SELLER.available(), lira(amount))
                 .build());
+    }
+
+    private void depositToCreditCustomer(String amount) {
+        ledger.post(Transaction.builder("deposit-1")
+                .debit(CUSTOMER_PAYMENTS, lira(amount))
+                .credit(CREDIT_CUSTOMER, lira(amount))
+                .build());
+    }
+
+    private static Transaction payout(String key, Account from, String amount) {
+        return Transaction.builder(key)
+                .debit(from, lira(amount))
+                .credit(BANK, lira(amount))
+                .build();
     }
 
     private static Transaction sale(String orderKey) {

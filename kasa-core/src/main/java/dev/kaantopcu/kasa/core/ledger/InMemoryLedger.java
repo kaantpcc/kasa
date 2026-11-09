@@ -2,12 +2,14 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -77,6 +79,7 @@ public final class InMemoryLedger implements Ledger {
             return;
         }
         requireOpenAccounts(transaction);
+        requireBalancePolicies(transaction);
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
     }
@@ -134,6 +137,38 @@ public final class InMemoryLedger implements Ledger {
         if (!accountsById.get(account.id()).equals(account)) {
             throw new AccountDefinitionConflictException(account.id());
         }
+    }
+
+    private void requireBalancePolicies(Transaction transaction) {
+        balanceChanges(transaction).forEach(this::requireWithinPolicy);
+    }
+
+    private void requireWithinPolicy(Account account, Money balanceChange) {
+        switch (account.balancePolicy()) {
+            case BalancePolicy.Unlimited() -> {
+            }
+            case BalancePolicy.NonNegative() -> requireSpendable(account, balanceChange, Money.zero(account.currency()));
+            case BalancePolicy.Overdraft(Money limit) -> requireSpendable(account, balanceChange, limit);
+        }
+    }
+
+    private void requireSpendable(Account account, Money balanceChange, Money overdraftLimit) {
+        if (!balanceChange.isNegative()) {
+            return;
+        }
+        Money spendable = calculateBalance(account).add(overdraftLimit);
+        Money requested = balanceChange.negate();
+        if (spendable.isLessThan(requested)) {
+            throw new InsufficientFundsException(account.id(), spendable, requested);
+        }
+    }
+
+    private static Map<Account, Money> balanceChanges(Transaction transaction) {
+        Map<Account, Money> changes = new LinkedHashMap<>();
+        for (Entry entry : transaction.entries()) {
+            changes.merge(entry.account(), signedAmount(entry, entry.account().normalBalance()), Money::add);
+        }
+        return changes;
     }
 
     private void requireSufficientFunds(Hold hold) {
