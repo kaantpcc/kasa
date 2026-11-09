@@ -1,6 +1,7 @@
 package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
+import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
@@ -10,16 +11,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 import java.util.function.Supplier;
 
 public final class InMemoryLedger implements Ledger {
 
+    private final Map<AccountId, Account> accountsById = new HashMap<>();
     private final List<Entry> entries = new ArrayList<>();
     private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    @Override
+    public void open(Account account) {
+        Objects.requireNonNull(account, "account");
+        write(() -> recordAccount(account));
+    }
 
     @Override
     public void post(Transaction transaction) {
@@ -57,11 +63,20 @@ public final class InMemoryLedger implements Ledger {
         return read(() -> calculateBalance(account.available()).add(calculateBalance(account.held())));
     }
 
+    private void recordAccount(Account account) {
+        if (accountsById.containsKey(account.id())) {
+            requireSameDefinition(account);
+            return;
+        }
+        accountsById.put(account.id(), account);
+    }
+
     private void record(Transaction transaction) {
         if (transactionsByKey.containsKey(transaction.idempotencyKey())) {
             requireSameTransaction(transactionsByKey.get(transaction.idempotencyKey()), transaction);
             return;
         }
+        requireOpenAccounts(transaction);
         transactionsByKey.put(transaction.idempotencyKey(), transaction);
         entries.addAll(transaction.entries());
     }
@@ -81,6 +96,7 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private Money calculateBalance(Account account) {
+        requireOpen(account);
         Money balance = Money.zero(account.currency());
         for (Entry entry : entries) {
             if (entry.account().equals(account)) {
@@ -91,6 +107,7 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private List<Entry> entriesOf(Account account) {
+        requireOpen(account);
         List<Entry> accountEntries = new ArrayList<>();
         for (Entry entry : entries) {
             if (entry.account().equals(account)) {
@@ -98,6 +115,25 @@ public final class InMemoryLedger implements Ledger {
             }
         }
         return List.copyOf(accountEntries);
+    }
+
+    private void requireOpenAccounts(Transaction transaction) {
+        for (Entry entry : transaction.entries()) {
+            requireOpen(entry.account());
+        }
+    }
+
+    private void requireOpen(Account account) {
+        if (!accountsById.containsKey(account.id())) {
+            throw new AccountNotOpenException(account.id());
+        }
+        requireSameDefinition(account);
+    }
+
+    private void requireSameDefinition(Account account) {
+        if (!accountsById.get(account.id()).equals(account)) {
+            throw new AccountDefinitionConflictException(account.id());
+        }
     }
 
     private void requireSufficientFunds(Hold hold) {

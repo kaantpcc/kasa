@@ -6,6 +6,7 @@ import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.money.Money;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Currency;
@@ -26,6 +27,14 @@ class HoldTest {
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private final InMemoryLedger ledger = new InMemoryLedger();
+
+    @BeforeEach
+    void openAccounts() {
+        ledger.open(CUSTOMER_PAYMENTS);
+        ledger.open(BANK);
+        ledger.open(SELLER.available());
+        ledger.open(SELLER.held());
+    }
 
     @Test
     void placeMovesAmountFromAvailableToHeldAccount() {
