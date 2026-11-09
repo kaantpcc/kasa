@@ -22,10 +22,10 @@ abstract class AccountStatusContractTest {
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
     private static final Account BANK = account("bank", Side.DEBIT, unlimited());
-    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT, nonNegative());
+    private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT, nonNegative());
     private static final HoldableAccount SELLER = new HoldableAccount(
             SELLER_WALLET,
-            account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
+            account("seller:42:wallet:held", Side.CREDIT, nonNegative()));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private Ledger ledger;
@@ -109,7 +109,7 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.freeze(SELLER_WALLET))
                 .isInstanceOf(AccountClosedException.class)
-                .hasMessage("Account seller-42-wallet is closed");
+                .hasMessage("Account seller:42:wallet is closed");
     }
 
     @Test
@@ -118,25 +118,25 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.unfreeze(SELLER_WALLET))
                 .isInstanceOf(AccountClosedException.class)
-                .hasMessage("Account seller-42-wallet is closed");
+                .hasMessage("Account seller:42:wallet is closed");
     }
 
     @Test
     void rejectsStatusChangeOfAccountThatIsNotOpened() {
-        Account misspelledWallet = account("seler-42-wallet", Side.CREDIT, nonNegative());
+        Account misspelledWallet = account("seler:42:wallet", Side.CREDIT, nonNegative());
 
         assertThatThrownBy(() -> ledger.freeze(misspelledWallet))
                 .isInstanceOf(AccountNotOpenException.class)
-                .hasMessage("Account seler-42-wallet has not been opened");
+                .hasMessage("Account seler:42:wallet has not been opened");
     }
 
     @Test
     void rejectsStatusOfAccountThatIsNotOpened() {
-        Account misspelledWallet = account("seler-42-wallet", Side.CREDIT, nonNegative());
+        Account misspelledWallet = account("seler:42:wallet", Side.CREDIT, nonNegative());
 
         assertThatThrownBy(() -> ledger.status(misspelledWallet))
                 .isInstanceOf(AccountNotOpenException.class)
-                .hasMessage("Account seler-42-wallet has not been opened");
+                .hasMessage("Account seler:42:wallet has not been opened");
     }
 
     @Test
@@ -184,7 +184,7 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.post(payout))
                 .isInstanceOf(AccountFrozenException.class)
-                .hasMessage("Account seller-42-wallet is frozen");
+                .hasMessage("Account seller:42:wallet is frozen");
     }
 
     @Test
@@ -217,7 +217,7 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.placeHold(hold))
                 .isInstanceOf(AccountFrozenException.class)
-                .hasMessage("Account seller-42-wallet is frozen");
+                .hasMessage("Account seller:42:wallet is frozen");
     }
 
     @Test
@@ -227,7 +227,7 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.reverse(new IdempotencyKey("order-1")))
                 .isInstanceOf(AccountFrozenException.class)
-                .hasMessage("Account seller-42-wallet is frozen");
+                .hasMessage("Account seller:42:wallet is frozen");
     }
 
     @Test
@@ -293,7 +293,7 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.close(SELLER_WALLET))
                 .isInstanceOf(NonZeroBalanceException.class)
-                .hasMessage("Cannot close account seller-42-wallet with non-zero balance 900.00 TRY");
+                .hasMessage("Cannot close account seller:42:wallet with non-zero balance 900.00 TRY");
     }
 
     @Test
@@ -323,7 +323,7 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.post(sale))
                 .isInstanceOf(AccountClosedException.class)
-                .hasMessage("Account seller-42-wallet is closed");
+                .hasMessage("Account seller:42:wallet is closed");
     }
 
     @Test
@@ -343,7 +343,7 @@ abstract class AccountStatusContractTest {
 
         assertThatThrownBy(() -> ledger.open(SELLER_WALLET))
                 .isInstanceOf(AccountClosedException.class)
-                .hasMessage("Account seller-42-wallet is closed");
+                .hasMessage("Account seller:42:wallet is closed");
     }
 
     @Test

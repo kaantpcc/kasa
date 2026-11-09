@@ -13,10 +13,10 @@ class HoldableAccountTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
-    private static final AccountId HELD_ID = new AccountId("seller-42-wallet-held");
+    private static final AccountId HELD_ID = new AccountId("seller:42:wallet:held");
 
     private static final Account SELLER_WALLET =
-            new Account(new AccountId("seller-42-wallet"), TRY, Side.CREDIT, BalancePolicy.nonNegative());
+            new Account(new AccountId("seller:42:wallet"), TRY, Side.CREDIT, BalancePolicy.nonNegative());
     private static final Account SELLER_WALLET_HELD =
             new Account(HELD_ID, TRY, Side.CREDIT, BalancePolicy.nonNegative());
 
@@ -46,7 +46,7 @@ class HoldableAccountTest {
     void rejectsSameAccountAsAvailableAndHeld() {
         assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, SELLER_WALLET))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Held account must differ from available account, got seller-42-wallet");
+                .hasMessage("Held account must differ from available account, got seller:42:wallet");
     }
 
     @Test
@@ -73,7 +73,7 @@ class HoldableAccountTest {
 
         assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, unlimitedHeld))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Held account seller-42-wallet-held must have a non-negative balance policy");
+                .hasMessage("Held account seller:42:wallet:held must have a non-negative balance policy");
     }
 
     @Test
@@ -82,6 +82,6 @@ class HoldableAccountTest {
 
         assertThatThrownBy(() -> new HoldableAccount(SELLER_WALLET, heldWithOverdraft))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Held account seller-42-wallet-held must have a non-negative balance policy");
+                .hasMessage("Held account seller:42:wallet:held must have a non-negative balance policy");
     }
 }

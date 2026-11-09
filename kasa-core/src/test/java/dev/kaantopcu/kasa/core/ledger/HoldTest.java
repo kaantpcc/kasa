@@ -25,8 +25,8 @@ class HoldTest {
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
     private static final Account BANK = account("bank", Side.DEBIT, unlimited());
     private static final HoldableAccount SELLER = new HoldableAccount(
-            account("seller-42-wallet", Side.CREDIT, nonNegative()),
-            account("seller-42-wallet-held", Side.CREDIT, nonNegative()));
+            account("seller:42:wallet", Side.CREDIT, nonNegative()),
+            account("seller:42:wallet:held", Side.CREDIT, nonNegative()));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
     private final InMemoryLedger ledger = new InMemoryLedger();

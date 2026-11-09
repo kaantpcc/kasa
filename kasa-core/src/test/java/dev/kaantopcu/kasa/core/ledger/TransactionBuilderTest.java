@@ -17,7 +17,7 @@ class TransactionBuilderTest {
     private static final Currency TRY = Currency.getInstance("TRY");
 
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
-    private static final Account SELLER_WALLET = account("seller-42-wallet", Side.CREDIT);
+    private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT);
     private static final Account COMMISSION = account("commission", Side.CREDIT);
 
     @Test

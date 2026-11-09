@@ -1,10 +1,12 @@
 package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
+import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
+import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.money.Money;
 
 import java.util.ArrayList;
@@ -84,6 +86,12 @@ public final class InMemoryLedger implements Ledger {
     }
 
     @Override
+    public Money balanceUnder(AccountId branch) {
+        Objects.requireNonNull(branch, "branch");
+        return read(() -> calculateBranchBalance(branch));
+    }
+
+    @Override
     public AccountStatus status(Account account) {
         Objects.requireNonNull(account, "account");
         return read(() -> accounts.statusOf(account));
@@ -120,6 +128,16 @@ public final class InMemoryLedger implements Ledger {
         return balance;
     }
 
+    private Money calculateBranchBalance(AccountId branch) {
+        List<Account> branchAccounts = accounts.accountsWithin(branch);
+        requireSummable(branch, branchAccounts);
+        Money total = Money.zero(branchAccounts.getFirst().currency());
+        for (Account account : branchAccounts) {
+            total = total.add(calculateBalance(account));
+        }
+        return total;
+    }
+
     private List<Entry> entriesOf(Account account) {
         accounts.requireOpened(account);
         List<Entry> accountEntries = new ArrayList<>();
@@ -154,6 +172,18 @@ public final class InMemoryLedger implements Ledger {
         Money requested = balanceChange.negate();
         if (spendable.isLessThan(requested)) {
             throw new InsufficientFundsException(account.id(), spendable, requested);
+        }
+    }
+
+    private static void requireSummable(AccountId branch, List<Account> branchAccounts) {
+        Account first = branchAccounts.getFirst();
+        for (Account account : branchAccounts) {
+            if (!account.currency().equals(first.currency())) {
+                throw new CurrencyMismatchException(first.currency(), account.currency());
+            }
+            if (account.normalBalance() != first.normalBalance()) {
+                throw new MixedNormalBalanceException(branch);
+            }
         }
     }
 

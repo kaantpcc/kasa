@@ -19,7 +19,7 @@ class EntryTest {
     private static final Currency TRY = Currency.getInstance("TRY");
     private static final Currency USD = Currency.getInstance("USD");
     private static final Account SELLER_WALLET =
-            new Account(new AccountId("seller-wallet-42"), TRY, Side.CREDIT, BalancePolicy.nonNegative());
+            new Account(new AccountId("seller:42:wallet"), TRY, Side.CREDIT, BalancePolicy.nonNegative());
 
     @Test
     void createsEntryWithAccountAmountAndSide() {
