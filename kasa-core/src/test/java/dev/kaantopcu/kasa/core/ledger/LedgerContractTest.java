@@ -99,7 +99,7 @@ abstract class LedgerContractTest {
 
         ledger.post(sale("order-1"));
 
-        assertThat(ledger.statement(SELLER_WALLET)).hasSize(1);
+        assertThat(ledger.entries(SELLER_WALLET)).hasSize(1);
     }
 
     @Test
@@ -165,10 +165,10 @@ abstract class LedgerContractTest {
     }
 
     @Test
-    void returnsEmptyStatementWhenAccountHasNoEntries() {
+    void returnsNoEntriesWhenAccountHasNoEntries() {
         ledger.post(sale("order-1"));
 
-        assertThat(ledger.statement(BANK)).isEmpty();
+        assertThat(ledger.entries(BANK)).isEmpty();
     }
 
     @Test
@@ -179,23 +179,23 @@ abstract class LedgerContractTest {
                 .credit(BANK, lira("300.00"))
                 .build());
 
-        assertThat(ledger.statement(SELLER_WALLET)).containsExactly(
+        assertThat(ledger.entries(SELLER_WALLET)).containsExactly(
                 new Entry(SELLER_WALLET, lira("900.00"), Side.CREDIT),
                 new Entry(SELLER_WALLET, lira("300.00"), Side.DEBIT));
     }
 
     @Test
-    void doesNotAllowStatementToBeModified() {
+    void doesNotAllowEntriesToBeModified() {
         ledger.post(sale("order-1"));
 
-        assertThatThrownBy(() -> ledger.statement(SELLER_WALLET).add(
+        assertThatThrownBy(() -> ledger.entries(SELLER_WALLET).add(
                 new Entry(SELLER_WALLET, lira("50.00"), Side.CREDIT)))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
-    void rejectsNullAccountForStatement() {
-        assertThatThrownBy(() -> ledger.statement(null))
+    void rejectsNullAccountForEntries() {
+        assertThatThrownBy(() -> ledger.entries(null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("account");
     }
@@ -211,12 +211,12 @@ abstract class LedgerContractTest {
     }
 
     @Test
-    void keepsOriginalAndReversalEntriesInStatement() {
+    void keepsOriginalAndReversalEntries() {
         ledger.post(sale("order-1"));
 
         ledger.reverse(new IdempotencyKey("order-1"));
 
-        assertThat(ledger.statement(SELLER_WALLET)).containsExactly(
+        assertThat(ledger.entries(SELLER_WALLET)).containsExactly(
                 new Entry(SELLER_WALLET, lira("900.00"), Side.CREDIT),
                 new Entry(SELLER_WALLET, lira("900.00"), Side.DEBIT));
     }

@@ -354,7 +354,7 @@ abstract class AccountStatusContractTest {
         ledger.close(SELLER_WALLET);
 
         assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
-        assertThat(ledger.statement(SELLER_WALLET)).hasSize(2);
+        assertThat(ledger.entries(SELLER_WALLET)).hasSize(2);
     }
 
     @Test
@@ -365,7 +365,7 @@ abstract class AccountStatusContractTest {
 
         ledger.post(payout("payout-1", "900.00"));
 
-        assertThat(ledger.statement(SELLER_WALLET)).hasSize(2);
+        assertThat(ledger.entries(SELLER_WALLET)).hasSize(2);
     }
 
     private static Transaction sale(String orderKey, String amount) {

@@ -74,6 +74,16 @@ public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries, Op
         return new Transaction(new IdempotencyKey(idempotencyKey.value() + REVERSAL_SUFFIX), reversedEntries);
     }
 
+    List<Entry> entriesFor(Account account) {
+        List<Entry> accountEntries = new ArrayList<>();
+        for (Entry entry : entries) {
+            if (entry.account().equals(account)) {
+                accountEntries.add(entry);
+            }
+        }
+        return accountEntries;
+    }
+
     public static Builder builder(String idempotencyKey) {
         return new Builder(new IdempotencyKey(idempotencyKey));
     }

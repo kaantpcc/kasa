@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 abstract class LedgerTimeContractTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
+    private static final Currency USD = Currency.getInstance("USD");
     private static final Instant START = Instant.parse("2026-11-16T09:00:00Z");
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
     private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT, nonNegative());
@@ -120,6 +121,241 @@ abstract class LedgerTimeContractTest {
     }
 
     @Test
+    void neverRecordsEarlierThanPreviousTransaction() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(-1));
+
+        ledger.post(Transaction.builder("order-2")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(SELLER_WALLET, lira("100.00"))
+                .build());
+
+        assertThat(ledger.posted(new IdempotencyKey("order-2")).orElseThrow().recordedAt()).isEqualTo(START);
+    }
+
+    @Test
+    void balanceAsOfCountsOnlyTransactionsRecordedBefore() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(1));
+        ledger.post(secondSale());
+
+        Money balance = ledger.balanceAsOf(SELLER_WALLET, START.plus(Duration.ofMinutes(30)));
+
+        assertThat(balance).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void balanceAsOfExcludesTransactionRecordedExactlyAtThatInstant() {
+        ledger.post(sale().build());
+
+        assertThat(ledger.balanceAsOf(SELLER_WALLET, START)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void balanceAsOfLaterInstantMatchesCurrentBalance() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(1));
+        ledger.post(secondSale());
+
+        Money balance = ledger.balanceAsOf(SELLER_WALLET, START.plus(Duration.ofDays(1)));
+
+        assertThat(balance).isEqualTo(ledger.balance(SELLER_WALLET));
+    }
+
+    @Test
+    void balanceAsOfIncludesTransactionRecordedWhileClockWasBehind() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(-1));
+        ledger.post(secondSale());
+
+        Money balance = ledger.balanceAsOf(SELLER_WALLET, START.plus(Duration.ofMinutes(1)));
+
+        assertThat(balance).isEqualTo(lira("1000.00"));
+    }
+
+    @Test
+    void rejectsBalanceAsOfForAccountThatIsNotOpened() {
+        Account misspelledWallet = account("seler:42:wallet", Side.CREDIT, nonNegative());
+
+        assertThatThrownBy(() -> ledger.balanceAsOf(misspelledWallet, START))
+                .isInstanceOf(AccountNotOpenException.class);
+    }
+
+    @Test
+    void rejectsNullInstantForBalanceAsOf() {
+        assertThatThrownBy(() -> ledger.balanceAsOf(SELLER_WALLET, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("asOf");
+    }
+
+    @Test
+    void statementShowsOpeningBalanceLinesAndClosingBalance() {
+        postTwoSalesAnHourApart();
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofMinutes(30)), START.plus(Duration.ofHours(2)));
+
+        assertThat(statement.openingBalance()).isEqualTo(lira("900.00"));
+        assertThat(statement.lines()).hasSize(1);
+        assertThat(statement.lines().getFirst().balanceAfter()).isEqualTo(lira("1000.00"));
+        assertThat(statement.closingBalance()).isEqualTo(lira("1000.00"));
+    }
+
+    @Test
+    void statementLineCarriesPostedTransactionDetails() {
+        ledger.post(sale().valueDate(LocalDate.of(2026, 11, 20)).description("Order 1 payment").build());
+
+        StatementLine line = ledger.statement(SELLER_WALLET, START, START.plus(Duration.ofHours(1))).lines().getFirst();
+
+        assertThat(line.posted().recordedAt()).isEqualTo(START);
+        assertThat(line.posted().valueDate()).isEqualTo(LocalDate.of(2026, 11, 20));
+        assertThat(line.posted().transaction().description()).contains("Order 1 payment");
+        assertThat(line.entry()).isEqualTo(new Entry(SELLER_WALLET, lira("900.00"), Side.CREDIT));
+        assertThat(line.balanceAfter()).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void statementIncludesLineRecordedAtStartOfPeriod() {
+        postTwoSalesAnHourApart();
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofHours(1)), START.plus(Duration.ofHours(2)));
+
+        assertThat(statement.lines())
+                .extracting(line -> line.posted().transaction().idempotencyKey())
+                .containsExactly(new IdempotencyKey("order-2"));
+    }
+
+    @Test
+    void statementExcludesLineRecordedAtEndOfPeriod() {
+        postTwoSalesAnHourApart();
+
+        Statement statement = ledger.statement(SELLER_WALLET, START, START.plus(Duration.ofHours(1)));
+
+        assertThat(statement.lines())
+                .extracting(line -> line.posted().transaction().idempotencyKey())
+                .containsExactly(ORDER_KEY);
+        assertThat(statement.closingBalance()).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void emptyPeriodHasEqualOpeningAndClosingBalance() {
+        ledger.post(sale().build());
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofHours(1)), START.plus(Duration.ofHours(2)));
+
+        assertThat(statement.lines()).isEmpty();
+        assertThat(statement.openingBalance()).isEqualTo(lira("900.00"));
+        assertThat(statement.closingBalance()).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void closingBalanceMatchesBalanceAsOfEndOfPeriod() {
+        postTwoSalesAnHourApart();
+        Instant end = START.plus(Duration.ofMinutes(90));
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofMinutes(30)), end);
+
+        assertThat(statement.closingBalance()).isEqualTo(ledger.balanceAsOf(SELLER_WALLET, end));
+    }
+
+    @Test
+    void rejectsPeriodEndingBeforeItStarts() {
+        Instant later = START.plus(Duration.ofHours(1));
+
+        assertThatThrownBy(() -> ledger.statement(SELLER_WALLET, later, START))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Statement period must not end before it starts, got 2026-11-16T10:00:00Z to 2026-11-16T09:00:00Z");
+    }
+
+    @Test
+    void trialBalanceShowsTotalsOfEachOpenAccount() {
+        ledger.post(sale().build());
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.lines()).containsExactly(
+                new TrialBalanceLine(CUSTOMER_PAYMENTS, lira("900.00"), lira("0.00")),
+                new TrialBalanceLine(SELLER_WALLET, lira("0.00"), lira("900.00")));
+    }
+
+    @Test
+    void trialBalanceShowsBalanceOnEachAccountsNormalSide() {
+        ledger.post(sale().build());
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.lines())
+                .extracting(TrialBalanceLine::balance)
+                .containsExactly(lira("900.00"), lira("900.00"));
+    }
+
+    @Test
+    void trialBalanceIsBalancedAfterSalesAndReversal() {
+        postTwoSalesAnHourApart();
+        ledger.reverse(ORDER_KEY);
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofDays(1)));
+
+        assertThat(trialBalance.totalDebits(TRY)).isEqualTo(lira("1900.00"));
+        assertThat(trialBalance.totalCredits(TRY)).isEqualTo(lira("1900.00"));
+        assertThat(trialBalance.isBalanced()).isTrue();
+    }
+
+    @Test
+    void trialBalanceExcludesTransactionsRecordedAtOrAfterAsOf() {
+        postTwoSalesAnHourApart();
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.totalDebits(TRY)).isEqualTo(lira("900.00"));
+        assertThat(trialBalance.totalCredits(TRY)).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void trialBalanceListsAccountsWithoutMovementWithZeroTotals() {
+        TrialBalance trialBalance = ledger.trialBalance(START);
+
+        assertThat(trialBalance.lines()).containsExactly(
+                new TrialBalanceLine(CUSTOMER_PAYMENTS, lira("0.00"), lira("0.00")),
+                new TrialBalanceLine(SELLER_WALLET, lira("0.00"), lira("0.00")));
+        assertThat(trialBalance.isBalanced()).isTrue();
+    }
+
+    @Test
+    void trialBalanceTotalsEachCurrencySeparately() {
+        Account dollarPayments = new Account(new AccountId("customer-payments-usd"), USD, Side.DEBIT, unlimited());
+        Account dollarWallet = new Account(new AccountId("seller:42:wallet-usd"), USD, Side.CREDIT, nonNegative());
+        ledger.open(dollarPayments);
+        ledger.open(dollarWallet);
+        ledger.post(sale().build());
+        ledger.post(Transaction.builder("order-usd-1")
+                .debit(dollarPayments, Money.of("50.00", USD))
+                .credit(dollarWallet, Money.of("50.00", USD))
+                .build());
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.totalDebits(TRY)).isEqualTo(lira("900.00"));
+        assertThat(trialBalance.totalDebits(USD)).isEqualTo(Money.of("50.00", USD));
+        assertThat(trialBalance.totalCredits(USD)).isEqualTo(Money.of("50.00", USD));
+        assertThat(trialBalance.isBalanced()).isTrue();
+    }
+
+    @Test
+    void rejectsNullAsOfForTrialBalance() {
+        assertThatThrownBy(() -> ledger.trialBalance(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("asOf");
+    }
+
+    @Test
+    void rejectsStatementForAccountThatIsNotOpened() {
+        Account misspelledWallet = account("seler:42:wallet", Side.CREDIT, nonNegative());
+
+        assertThatThrownBy(() -> ledger.statement(misspelledWallet, START, START.plus(Duration.ofHours(1))))
+                .isInstanceOf(AccountNotOpenException.class);
+    }
+
+    @Test
     void rejectsNullKeyForPosted() {
         assertThatThrownBy(() -> ledger.posted(null))
                 .isInstanceOf(NullPointerException.class)
@@ -133,6 +369,12 @@ abstract class LedgerTimeContractTest {
         return openedLedger;
     }
 
+    private void postTwoSalesAnHourApart() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(1));
+        ledger.post(secondSale());
+    }
+
     private static PostedTransaction postedOrder(Ledger ledger) {
         return ledger.posted(ORDER_KEY).orElseThrow();
     }
@@ -141,6 +383,13 @@ abstract class LedgerTimeContractTest {
         return Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
                 .credit(SELLER_WALLET, lira("900.00"));
+    }
+
+    private static Transaction secondSale() {
+        return Transaction.builder("order-2")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(SELLER_WALLET, lira("100.00"))
+                .build();
     }
 
     private static Money lira(String amount) {

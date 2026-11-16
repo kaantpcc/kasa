@@ -52,7 +52,7 @@ abstract class LedgerConcurrencyContractTest {
             }
         }
 
-        assertThat(ledger.statement(SELLER_WALLET)).hasSize(ORDER_COUNT);
+        assertThat(ledger.entries(SELLER_WALLET)).hasSize(ORDER_COUNT);
     }
 
     @Test
