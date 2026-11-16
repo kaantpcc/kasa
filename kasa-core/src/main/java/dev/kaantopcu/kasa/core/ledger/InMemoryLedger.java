@@ -5,24 +5,21 @@ import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
-import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.money.Money;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Supplier;
 
 public final class InMemoryLedger implements Ledger {
 
     private final AccountRegistry accounts = new AccountRegistry();
-    private final List<Entry> entries = new ArrayList<>();
-    private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
+    private final Journal journal = new Journal();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     @Override
@@ -76,7 +73,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public List<Entry> statement(Account account) {
         Objects.requireNonNull(account, "account");
-        return read(() -> entriesOf(account));
+        return read(() -> statementOf(account));
     }
 
     @Override
@@ -98,34 +95,32 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private void record(Transaction transaction) {
-        if (transactionsByKey.containsKey(transaction.idempotencyKey())) {
-            requireSameTransaction(transactionsByKey.get(transaction.idempotencyKey()), transaction);
+        Optional<Transaction> existing = journal.transactionWith(transaction.idempotencyKey());
+        if (existing.isPresent()) {
+            requireSameTransaction(existing.get(), transaction);
             return;
         }
         requireOpenedAccounts(transaction);
         Map<Account, Money> changes = balanceChanges(transaction);
         changes.forEach(accounts::requireMovementAllowed);
         changes.forEach(this::requireWithinPolicy);
-        transactionsByKey.put(transaction.idempotencyKey(), transaction);
-        entries.addAll(transaction.entries());
+        journal.append(transaction);
     }
 
     private void recordReversal(IdempotencyKey key) {
-        if (!transactionsByKey.containsKey(key)) {
-            throw new TransactionNotFoundException(key);
-        }
-        record(transactionsByKey.get(key).reversed());
+        Transaction original = journal.transactionWith(key)
+                .orElseThrow(() -> new TransactionNotFoundException(key));
+        record(original.reversed());
     }
 
     private Money calculateBalance(Account account) {
         accounts.requireOpened(account);
-        Money balance = Money.zero(account.currency());
-        for (Entry entry : entries) {
-            if (entry.account().equals(account)) {
-                balance = balance.add(signedAmount(entry, account.normalBalance()));
-            }
-        }
-        return balance;
+        return journal.balanceOf(account);
+    }
+
+    private List<Entry> statementOf(Account account) {
+        accounts.requireOpened(account);
+        return journal.entriesOf(account);
     }
 
     private Money calculateBranchBalance(AccountId branch) {
@@ -136,17 +131,6 @@ public final class InMemoryLedger implements Ledger {
             total = total.add(calculateBalance(account));
         }
         return total;
-    }
-
-    private List<Entry> entriesOf(Account account) {
-        accounts.requireOpened(account);
-        List<Entry> accountEntries = new ArrayList<>();
-        for (Entry entry : entries) {
-            if (entry.account().equals(account)) {
-                accountEntries.add(entry);
-            }
-        }
-        return List.copyOf(accountEntries);
     }
 
     private void requireOpenedAccounts(Transaction transaction) {
@@ -190,7 +174,7 @@ public final class InMemoryLedger implements Ledger {
     private static Map<Account, Money> balanceChanges(Transaction transaction) {
         Map<Account, Money> changes = new LinkedHashMap<>();
         for (Entry entry : transaction.entries()) {
-            changes.merge(entry.account(), signedAmount(entry, entry.account().normalBalance()), Money::add);
+            changes.merge(entry.account(), entry.balanceChange(), Money::add);
         }
         return changes;
     }
@@ -217,12 +201,5 @@ public final class InMemoryLedger implements Ledger {
         } finally {
             lock.writeLock().unlock();
         }
-    }
-
-    private static Money signedAmount(Entry entry, Side normalBalance) {
-        if (entry.side() == normalBalance) {
-            return entry.amount();
-        }
-        return entry.amount().negate();
     }
 }

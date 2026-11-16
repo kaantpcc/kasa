@@ -21,6 +21,13 @@ public record Entry(Account account, Money amount, Side side) {
         return new Entry(account, amount, side.opposite());
     }
 
+    public Money balanceChange() {
+        if (side == account.normalBalance()) {
+            return amount;
+        }
+        return amount.negate();
+    }
+
     private static void requirePositive(Money amount) {
         if (!amount.isPositive()) {
             throw new InvalidEntryAmountException(amount);
