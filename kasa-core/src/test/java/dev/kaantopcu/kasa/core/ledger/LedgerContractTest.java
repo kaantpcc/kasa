@@ -155,6 +155,124 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void acceptsPartialRefund() {
+        ledger.post(sale("order-1"));
+
+        ledger.post(refund("refund-1", "order-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("600.00"));
+        assertThat(ledger.balance(CUSTOMER_PAYMENTS)).isEqualTo(lira("700.00"));
+    }
+
+    @Test
+    void acceptsSeveralRefundsUpToOriginalAmount() {
+        ledger.post(sale("order-1"));
+
+        ledger.post(refund("refund-1", "order-1"));
+        ledger.post(refund("refund-2", "order-1"));
+        ledger.post(refund("refund-3", "order-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void rejectsRefundsExceedingOriginalAmount() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+        ledger.post(refund("refund-2", "order-1"));
+        ledger.post(refund("refund-3", "order-1"));
+        Transaction oneRefundTooMany = refund("refund-4", "order-1");
+
+        assertThatThrownBy(() -> ledger.post(oneRefundTooMany))
+                .isInstanceOf(RefundExceedsOriginalException.class)
+                .hasMessage("Refund exceeds what can be refunded on seller:42:wallet: refundable 0.00 TRY, requested 300.00 TRY");
+    }
+
+    @Test
+    void writesNothingWhenRefundIsRejected() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+        ledger.post(refund("refund-2", "order-1"));
+        ledger.post(refund("refund-3", "order-1"));
+        Transaction oneRefundTooMany = refund("refund-4", "order-1");
+
+        assertThatThrownBy(() -> ledger.post(oneRefundTooMany))
+                .isInstanceOf(RefundExceedsOriginalException.class);
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.posted(new IdempotencyKey("refund-4"))).isEmpty();
+    }
+
+    @Test
+    void ignoresRetryOfAcceptedRefund() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+
+        ledger.post(refund("refund-1", "order-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("600.00"));
+    }
+
+    @Test
+    void rejectsRefundOfUnknownTransaction() {
+        Transaction refundOfUnknownOrder = refund("refund-1", "order-404");
+
+        assertThatThrownBy(() -> ledger.post(refundOfUnknownOrder))
+                .isInstanceOf(TransactionNotFoundException.class)
+                .hasMessage("No transaction posted with idempotency key order-404");
+    }
+
+    @Test
+    void rejectsRefundToAccountThatWasNotInOriginal() {
+        ledger.post(sale("order-1"));
+        Transaction refundToBank = Transaction.builder("refund-1")
+                .refundOf("order-1")
+                .debit(SELLER_WALLET, lira("100.00"))
+                .credit(BANK, lira("100.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(refundToBank))
+                .isInstanceOf(RefundExceedsOriginalException.class)
+                .hasMessage("Refund exceeds what can be refunded on bank: refundable 0.00 TRY, requested 100.00 TRY");
+    }
+
+    @Test
+    void rejectsRefundInSameDirectionAsOriginal() {
+        ledger.post(sale("order-1"));
+        Transaction paysSellerAgain = Transaction.builder("refund-1")
+                .refundOf("order-1")
+                .credit(SELLER_WALLET, lira("100.00"))
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(paysSellerAgain))
+                .isInstanceOf(RefundExceedsOriginalException.class)
+                .hasMessage("Refund exceeds what can be refunded on seller:42:wallet: refundable 900.00 TRY, requested -100.00 TRY");
+    }
+
+    @Test
+    void rejectsFullReversalAfterPartialRefund() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+        IdempotencyKey orderKey = new IdempotencyKey("order-1");
+
+        assertThatThrownBy(() -> ledger.reverse(orderKey))
+                .isInstanceOf(RefundExceedsOriginalException.class)
+                .hasMessage("Refund exceeds what can be refunded on customer-payments: refundable 700.00 TRY, requested 1000.00 TRY");
+    }
+
+    @Test
+    void rejectsRefundAfterFullReversal() {
+        ledger.post(sale("order-1"));
+        ledger.reverse(new IdempotencyKey("order-1"));
+        Transaction lateRefund = refund("refund-1", "order-1");
+
+        assertThatThrownBy(() -> ledger.post(lateRefund))
+                .isInstanceOf(RefundExceedsOriginalException.class)
+                .hasMessage("Refund exceeds what can be refunded on seller:42:wallet: refundable 0.00 TRY, requested 300.00 TRY");
+    }
+
+    @Test
     void ignoresEntriesOfAnotherAccounts() {
         ledger.post(sale("order-1"));
 
