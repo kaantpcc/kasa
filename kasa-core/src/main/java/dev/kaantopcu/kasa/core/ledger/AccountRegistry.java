@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+// Not thread-safe on its own: InMemoryLedger calls it only while holding its read or write lock.
 final class AccountRegistry {
 
     private final Map<AccountId, Account> accountsById = new LinkedHashMap<>();

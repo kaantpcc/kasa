@@ -2,10 +2,10 @@ package dev.kaantopcu.kasa.core.money;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Currency;
-import java.util.Objects;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.List;
+import java.util.Objects;
 
 public record Money(BigDecimal amount, Currency currency) {
 
