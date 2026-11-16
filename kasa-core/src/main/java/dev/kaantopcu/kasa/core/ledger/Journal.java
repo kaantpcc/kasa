@@ -33,13 +33,11 @@ final class Journal {
     }
 
     Money balanceOf(Account account) {
-        Money balance = Money.zero(account.currency());
-        for (Entry entry : entriesOf(account)) {
-            if (entry.account().equals(account)) {
-                balance = balance.add(entry.balanceChange());
-            }
-        }
-        return balance;
+        return sumOf(account, entriesOf(account));
+    }
+
+    Money balanceBefore(Account account, Instant before) {
+        return sumOf(account, entriesBefore(account, before));
     }
 
     List<Entry> entriesOf(Account account) {
@@ -48,5 +46,24 @@ final class Journal {
             accountEntries.addAll(posted.transaction().entriesFor(account));
         }
         return List.copyOf(accountEntries);
+    }
+
+    List<Entry> entriesBefore(Account account, Instant before) {
+        List<Entry> accountEntries = new ArrayList<>();
+        for (PostedTransaction posted : postedInOrder) {
+            if (!posted.recordedAt().isBefore(before)) {
+                break;
+            }
+            accountEntries.addAll(posted.transaction().entriesFor(account));
+        }
+        return List.copyOf(accountEntries);
+    }
+
+    private static Money sumOf(Account account, List<Entry> entries) {
+        Money balance = Money.zero(account.currency());
+        for (Entry entry : entries) {
+            balance = balance.add(entry.balanceChange());
+        }
+        return balance;
     }
 }

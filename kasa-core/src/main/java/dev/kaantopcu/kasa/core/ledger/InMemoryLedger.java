@@ -79,6 +79,13 @@ public final class InMemoryLedger implements Ledger {
     }
 
     @Override
+    public Money balanceAsOf(Account account, Instant asOf) {
+        Objects.requireNonNull(account, "account");
+        Objects.requireNonNull(asOf, "asOf");
+        return read(() -> calculateBalanceAsOf(account, asOf));
+    }
+
+    @Override
     public List<Entry> statement(Account account) {
         Objects.requireNonNull(account, "account");
         return read(() -> statementOf(account));
@@ -146,6 +153,11 @@ public final class InMemoryLedger implements Ledger {
     private Money calculateBalance(Account account) {
         accounts.requireOpened(account);
         return journal.balanceOf(account);
+    }
+
+    private Money calculateBalanceAsOf(Account account, Instant asOf) {
+        accounts.requireOpened(account);
+        return journal.balanceBefore(account, asOf);
     }
 
     private List<Entry> statementOf(Account account) {

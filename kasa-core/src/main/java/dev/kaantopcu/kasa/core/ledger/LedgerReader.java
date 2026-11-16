@@ -6,12 +6,15 @@ import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.Money;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 public interface LedgerReader {
 
     Money balance(Account account);
+
+    Money balanceAsOf(Account account, Instant asOf);
 
     List<Entry> statement(Account account);
 

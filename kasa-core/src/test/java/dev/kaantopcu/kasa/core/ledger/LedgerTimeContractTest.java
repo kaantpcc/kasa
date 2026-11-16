@@ -133,6 +133,61 @@ abstract class LedgerTimeContractTest {
     }
 
     @Test
+    void balanceAsOfCountsOnlyTransactionsRecordedBefore() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(1));
+        ledger.post(secondSale());
+
+        Money balance = ledger.balanceAsOf(SELLER_WALLET, START.plus(Duration.ofMinutes(30)));
+
+        assertThat(balance).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void balanceAsOfExcludesTransactionRecordedExactlyAtThatInstant() {
+        ledger.post(sale().build());
+
+        assertThat(ledger.balanceAsOf(SELLER_WALLET, START)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void balanceAsOfLaterInstantMatchesCurrentBalance() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(1));
+        ledger.post(secondSale());
+
+        Money balance = ledger.balanceAsOf(SELLER_WALLET, START.plus(Duration.ofDays(1)));
+
+        assertThat(balance).isEqualTo(ledger.balance(SELLER_WALLET));
+    }
+
+    @Test
+    void balanceAsOfIncludesTransactionRecordedWhileClockWasBehind() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(-1));
+        ledger.post(secondSale());
+
+        Money balance = ledger.balanceAsOf(SELLER_WALLET, START.plus(Duration.ofMinutes(1)));
+
+        assertThat(balance).isEqualTo(lira("1000.00"));
+    }
+
+    @Test
+    void rejectsBalanceAsOfForAccountThatIsNotOpened() {
+        Account misspelledWallet = account("seler:42:wallet", Side.CREDIT, nonNegative());
+
+        assertThatThrownBy(() -> ledger.balanceAsOf(misspelledWallet, START))
+                .isInstanceOf(AccountNotOpenException.class);
+    }
+
+    @Test
+    void rejectsNullInstantForBalanceAsOf() {
+        assertThatThrownBy(() -> ledger.balanceAsOf(SELLER_WALLET, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("asOf");
+    }
+
+    @Test
     void rejectsNullKeyForPosted() {
         assertThatThrownBy(() -> ledger.posted(null))
                 .isInstanceOf(NullPointerException.class)
@@ -154,6 +209,13 @@ abstract class LedgerTimeContractTest {
         return Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
                 .credit(SELLER_WALLET, lira("900.00"));
+    }
+
+    private static Transaction secondSale() {
+        return Transaction.builder("order-2")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(SELLER_WALLET, lira("100.00"))
+                .build();
     }
 
     private static Money lira(String amount) {
