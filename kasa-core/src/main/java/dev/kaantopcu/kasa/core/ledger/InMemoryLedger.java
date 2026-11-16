@@ -159,6 +159,11 @@ public final class InMemoryLedger implements Ledger {
         return read(() -> journal.postedWith(key));
     }
 
+    @Override
+    public Optional<IdempotencyKey> verifyChain() {
+        return read(() -> HashChain.firstBrokenLink(journal.postedInOrder()));
+    }
+
     private void record(Transaction transaction) {
         Optional<PostedTransaction> existing = journal.postedWith(transaction.idempotencyKey());
         if (existing.isPresent()) {
@@ -230,8 +235,10 @@ public final class InMemoryLedger implements Ledger {
 
     private PostedTransaction stamp(Transaction transaction) {
         Instant recordedAt = nextRecordedAt();
-        LocalDate recordingDay = LocalDate.ofInstant(recordedAt, clock.getZone());
-        return new PostedTransaction(transaction, recordedAt, transaction.valueDate().orElse(recordingDay));
+        LocalDate valueDate = transaction.valueDate().orElse(LocalDate.ofInstant(recordedAt, clock.getZone()));
+        Hash previousHash = journal.latestHash();
+        Hash hash = HashChain.hashOf(previousHash, HashChain.canonicalOf(transaction, recordedAt, valueDate));
+        return new PostedTransaction(transaction, recordedAt, valueDate, previousHash, hash);
     }
 
     private Instant nextRecordedAt() {

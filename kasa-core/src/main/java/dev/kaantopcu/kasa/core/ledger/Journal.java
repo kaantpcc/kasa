@@ -42,6 +42,17 @@ final class Journal {
         return Optional.of(postedInOrder.getLast().recordedAt());
     }
 
+    Hash latestHash() {
+        if (postedInOrder.isEmpty()) {
+            return Hash.GENESIS;
+        }
+        return postedInOrder.getLast().hash();
+    }
+
+    List<PostedTransaction> postedInOrder() {
+        return List.copyOf(postedInOrder);
+    }
+
     Money balanceOf(Account account) {
         return sumOf(account, entriesOf(account));
     }

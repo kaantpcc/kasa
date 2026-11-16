@@ -49,7 +49,8 @@ class StatementTest {
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
                 .credit(SELLER_WALLET, lira("900.00"))
                 .build();
-        PostedTransaction posted = new PostedTransaction(sale, Instant.parse("2026-11-16T09:00:00Z"), LocalDate.of(2026, 11, 16));
+        PostedTransaction posted = new PostedTransaction(sale, Instant.parse("2026-11-16T09:00:00Z"), LocalDate.of(2026, 11, 16),
+                Hash.GENESIS, Hash.GENESIS);
         return new StatementLine(posted, new Entry(SELLER_WALLET, lira("900.00"), Side.CREDIT), lira("900.00"));
     }
 
