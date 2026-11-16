@@ -120,6 +120,19 @@ abstract class LedgerTimeContractTest {
     }
 
     @Test
+    void neverRecordsEarlierThanPreviousTransaction() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(-1));
+
+        ledger.post(Transaction.builder("order-2")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(SELLER_WALLET, lira("100.00"))
+                .build());
+
+        assertThat(ledger.posted(new IdempotencyKey("order-2")).orElseThrow().recordedAt()).isEqualTo(START);
+    }
+
+    @Test
     void rejectsNullKeyForPosted() {
         assertThatThrownBy(() -> ledger.posted(null))
                 .isInstanceOf(NullPointerException.class)

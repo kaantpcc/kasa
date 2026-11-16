@@ -3,6 +3,7 @@ package dev.kaantopcu.kasa.core.ledger;
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.money.Money;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,20 +14,27 @@ import java.util.Optional;
 final class Journal {
 
     private final Map<IdempotencyKey, PostedTransaction> postedByKey = new HashMap<>();
-    private final List<Entry> entries = new ArrayList<>();
+    private final List<PostedTransaction> postedInOrder = new ArrayList<>();
 
     void append(PostedTransaction posted) {
         postedByKey.put(posted.transaction().idempotencyKey(), posted);
-        entries.addAll(posted.transaction().entries());
+        postedInOrder.add(posted);
     }
 
     Optional<PostedTransaction> postedWith(IdempotencyKey key) {
         return Optional.ofNullable(postedByKey.get(key));
     }
 
+    Optional<Instant> latestRecordedAt() {
+        if (postedInOrder.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(postedInOrder.getLast().recordedAt());
+    }
+
     Money balanceOf(Account account) {
         Money balance = Money.zero(account.currency());
-        for (Entry entry : entries) {
+        for (Entry entry : entriesOf(account)) {
             if (entry.account().equals(account)) {
                 balance = balance.add(entry.balanceChange());
             }
@@ -36,10 +44,8 @@ final class Journal {
 
     List<Entry> entriesOf(Account account) {
         List<Entry> accountEntries = new ArrayList<>();
-        for (Entry entry : entries) {
-            if (entry.account().equals(account)) {
-                accountEntries.add(entry);
-            }
+        for (PostedTransaction posted : postedInOrder) {
+            accountEntries.addAll(posted.transaction().entriesFor(account));
         }
         return List.copyOf(accountEntries);
     }

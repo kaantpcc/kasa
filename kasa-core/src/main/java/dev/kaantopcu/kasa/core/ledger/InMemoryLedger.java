@@ -129,9 +129,18 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private PostedTransaction stamp(Transaction transaction) {
-        Instant recordedAt = clock.instant();
+        Instant recordedAt = nextRecordedAt();
         LocalDate recordingDay = LocalDate.ofInstant(recordedAt, clock.getZone());
         return new PostedTransaction(transaction, recordedAt, transaction.valueDate().orElse(recordingDay));
+    }
+
+    private Instant nextRecordedAt() {
+        Instant now = clock.instant();
+        Optional<Instant> latest = journal.latestRecordedAt();
+        if (latest.isPresent() && now.isBefore(latest.get())) {
+            return latest.get();
+        }
+        return now;
     }
 
     private Money calculateBalance(Account account) {
