@@ -31,4 +31,6 @@ public interface LedgerReader {
     AccountStatus status(Account account);
 
     Optional<PostedTransaction> posted(IdempotencyKey key);
+
+    Optional<IdempotencyKey> verifyChain();
 }

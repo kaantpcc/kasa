@@ -391,6 +391,73 @@ abstract class LedgerTimeContractTest {
                 .hasMessage("key");
     }
 
+    @Test
+    void firstPostedTransactionStartsChainFromGenesis() {
+        ledger.post(sale().build());
+
+        assertThat(postedOrder(ledger).previousHash()).isEqualTo(Hash.GENESIS);
+    }
+
+    @Test
+    void eachPostedTransactionCarriesHashOfPreviousOne() {
+        postTwoSalesAnHourApart();
+
+        PostedTransaction second = ledger.posted(new IdempotencyKey("order-2")).orElseThrow();
+
+        assertThat(second.previousHash()).isEqualTo(postedOrder(ledger).hash());
+    }
+
+    @Test
+    void storesHashComputedFromPreviousHashAndContent() {
+        ledger.post(sale().description("Order 1 payment").build());
+
+        PostedTransaction posted = postedOrder(ledger);
+        String content = HashChain.canonicalOf(posted.transaction(), posted.recordedAt(), posted.valueDate());
+
+        assertThat(posted.hash()).isEqualTo(HashChain.hashOf(Hash.GENESIS, content));
+    }
+
+    @Test
+    void retryOfAcceptedTransactionDoesNotExtendChain() {
+        ledger.post(sale().build());
+        ledger.post(sale().build());
+
+        ledger.post(secondSale());
+
+        PostedTransaction second = ledger.posted(new IdempotencyKey("order-2")).orElseThrow();
+        assertThat(second.previousHash()).isEqualTo(postedOrder(ledger).hash());
+    }
+
+    @Test
+    void rejectedTransactionDoesNotEnterChain() {
+        ledger.post(sale().build());
+        Transaction payoutWithoutFunds = Transaction.builder("payout-1")
+                .debit(SELLER_WALLET, lira("1000.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("1000.00"))
+                .build();
+        assertThatThrownBy(() -> ledger.post(payoutWithoutFunds))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        ledger.post(secondSale());
+
+        PostedTransaction second = ledger.posted(new IdempotencyKey("order-2")).orElseThrow();
+        assertThat(second.previousHash()).isEqualTo(postedOrder(ledger).hash());
+    }
+
+    @Test
+    void untouchedLedgerHasIntactChain() {
+        postTwoSalesAnHourApart();
+        clock.advance(Duration.ofHours(-2));
+        ledger.reverse(ORDER_KEY);
+
+        assertThat(ledger.verifyChain()).isEmpty();
+    }
+
+    @Test
+    void emptyLedgerHasIntactChain() {
+        assertThat(ledger.verifyChain()).isEmpty();
+    }
+
     private Ledger openedLedger(Clock ledgerClock) {
         Ledger openedLedger = createLedger(ledgerClock);
         openedLedger.open(CUSTOMER_PAYMENTS);
