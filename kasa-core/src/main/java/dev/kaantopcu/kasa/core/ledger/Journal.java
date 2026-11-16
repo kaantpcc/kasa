@@ -25,6 +25,16 @@ final class Journal {
         return Optional.ofNullable(postedByKey.get(key));
     }
 
+    List<PostedTransaction> refundsOf(IdempotencyKey originalKey) {
+        List<PostedTransaction> refunds = new ArrayList<>();
+        for (PostedTransaction posted : postedInOrder) {
+            if (posted.transaction().isRefundOf(originalKey)) {
+                refunds.add(posted);
+            }
+        }
+        return List.copyOf(refunds);
+    }
+
     Optional<Instant> latestRecordedAt() {
         if (postedInOrder.isEmpty()) {
             return Optional.empty();

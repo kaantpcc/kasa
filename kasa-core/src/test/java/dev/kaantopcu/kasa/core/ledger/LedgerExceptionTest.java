@@ -33,6 +33,7 @@ class LedgerExceptionTest {
             case InsufficientFundsException _ -> "insufficient-funds";
             case IdempotencyKeyConflictException _ -> "idempotency-key-conflict";
             case TransactionNotFoundException _ -> "transaction-not-found";
+            case RefundExceedsOriginalException _ -> "refund-exceeds-original";
         };
     }
 }

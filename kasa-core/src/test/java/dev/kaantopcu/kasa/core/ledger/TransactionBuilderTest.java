@@ -128,6 +128,42 @@ class TransactionBuilderTest {
                 .hasMessage("description");
     }
 
+    @Test
+    void leavesRefundLinkEmptyByDefault() {
+        Transaction transaction = sale().build();
+
+        assertThat(transaction.refundOf()).isEmpty();
+    }
+
+    @Test
+    void keepsRefundLinkGivenToBuilder() {
+        Transaction refund = Transaction.builder("refund-1")
+                .refundOf("order-123")
+                .debit(SELLER_WALLET, lira("100.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .build();
+
+        assertThat(refund.refundOf()).contains(new IdempotencyKey("order-123"));
+    }
+
+    @Test
+    void rejectsBlankRefundKey() {
+        Transaction.Builder builder = sale();
+
+        assertThatThrownBy(() -> builder.refundOf(" "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Idempotency key must not be blank");
+    }
+
+    @Test
+    void rejectsBuildingTransactionThatRefundsItself() {
+        Transaction.Builder builder = sale().refundOf("order-123");
+
+        assertThatThrownBy(() -> builder.build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Transaction order-123 cannot refund itself");
+    }
+
     private static Transaction.Builder sale() {
         return Transaction.builder("order-123")
                 .debit(CUSTOMER_PAYMENTS, lira("100.00"))

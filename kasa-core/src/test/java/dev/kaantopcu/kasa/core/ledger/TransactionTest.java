@@ -7,9 +7,11 @@ import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -20,6 +22,7 @@ class TransactionTest {
     private static final Currency USD = Currency.getInstance("USD");
 
     private static final IdempotencyKey ORDER_KEY = new IdempotencyKey("order-123");
+    private static final LocalDate VALUE_DATE = LocalDate.of(2026, 11, 16);
 
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", TRY, Side.DEBIT);
     private static final Account SELLER_WALLET = account("seller:42:wallet", TRY, Side.CREDIT);
@@ -154,7 +157,7 @@ class TransactionTest {
                 credit(SELLER_WALLET, "900.00"),
                 credit(COMMISSION, "100.00")));
 
-        Transaction reversal = original.reversed();
+        Transaction reversal = original.reversedOn(VALUE_DATE);
 
         assertThat(reversal.entries()).containsExactly(
                 credit(CUSTOMER_PAYMENTS, "1000.00"),
@@ -164,12 +167,56 @@ class TransactionTest {
 
     @Test
     void reversedTransactionUsesSuffixedKey() {
-        Transaction original = new Transaction(ORDER_KEY, List.of(
+        Transaction reversal = smallSale().reversedOn(VALUE_DATE);
+
+        assertThat(reversal.idempotencyKey()).isEqualTo(new IdempotencyKey("order-123:reversal"));
+    }
+
+    @Test
+    void reversedTransactionRefundsTheOriginal() {
+        Transaction reversal = smallSale().reversedOn(VALUE_DATE);
+
+        assertThat(reversal.refundOf()).contains(ORDER_KEY);
+    }
+
+    @Test
+    void reversedTransactionCarriesGivenValueDate() {
+        Transaction reversal = smallSale().reversedOn(VALUE_DATE);
+
+        assertThat(reversal.valueDate()).contains(VALUE_DATE);
+    }
+
+    @Test
+    void rejectsNullValueDateForReversal() {
+        Transaction original = smallSale();
+
+        assertThatThrownBy(() -> original.reversedOn(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("valueDate");
+    }
+
+    @Test
+    void rejectsTransactionRefundingItself() {
+        List<Entry> entries = smallSale().entries();
+
+        assertThatThrownBy(() -> new Transaction(ORDER_KEY, entries, Optional.empty(), Optional.empty(), Optional.of(ORDER_KEY)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Transaction order-123 cannot refund itself");
+    }
+
+    @Test
+    void rejectsNullRefundLink() {
+        List<Entry> entries = smallSale().entries();
+
+        assertThatThrownBy(() -> new Transaction(ORDER_KEY, entries, Optional.empty(), Optional.empty(), null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("refundOf");
+    }
+
+    private static Transaction smallSale() {
+        return new Transaction(ORDER_KEY, List.of(
                 debit(CUSTOMER_PAYMENTS, "100.00"),
                 credit(SELLER_WALLET, "100.00")));
-
-        assertThat(original.reversed().idempotencyKey())
-                .isEqualTo(new IdempotencyKey("order-123:reversal"));
     }
 
     private static Account account(String id, Currency currency, Side normalBalance) {

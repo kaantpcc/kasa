@@ -134,16 +134,32 @@ public final class InMemoryLedger implements Ledger {
         }
         requireOpenedAccounts(transaction);
         Map<Account, Money> changes = balanceChanges(transaction);
+        transaction.refundOf().ifPresent(originalKey -> requireWithinRefundable(originalKey, changes));
         changes.forEach(accounts::requireMovementAllowed);
         changes.forEach(this::requireWithinPolicy);
         journal.append(stamp(transaction));
     }
 
     private void recordReversal(IdempotencyKey key) {
-        Transaction original = journal.postedWith(key)
-                .orElseThrow(() -> new TransactionNotFoundException(key))
-                .transaction();
-        record(original.reversed());
+        PostedTransaction original = journal.postedWith(key)
+                .orElseThrow(() -> new TransactionNotFoundException(key));
+        record(original.transaction().reversedOn(original.valueDate()));
+    }
+
+    private void requireWithinRefundable(IdempotencyKey originalKey, Map<Account, Money> changes) {
+        RefundLimits limits = refundLimitsOf(originalKey);
+        changes.forEach(limits::requireRefundable);
+    }
+
+    private RefundLimits refundLimitsOf(IdempotencyKey originalKey) {
+        PostedTransaction original = journal.postedWith(originalKey)
+                .orElseThrow(() -> new TransactionNotFoundException(originalKey));
+        Map<Account, Money> refundedChanges = new LinkedHashMap<>();
+        for (PostedTransaction refund : journal.refundsOf(originalKey)) {
+            balanceChanges(refund.transaction())
+                    .forEach((account, change) -> refundedChanges.merge(account, change, Money::add));
+        }
+        return new RefundLimits(balanceChanges(original.transaction()), refundedChanges);
     }
 
     private PostedTransaction stamp(Transaction transaction) {
