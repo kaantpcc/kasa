@@ -22,6 +22,8 @@ public interface LedgerReader {
 
     Money totalBalance(HoldableAccount account);
 
+    List<Hold> activeHolds(HoldableAccount account);
+
     Money balanceUnder(AccountId branch);
 
     TrialBalance trialBalance(Instant asOf);

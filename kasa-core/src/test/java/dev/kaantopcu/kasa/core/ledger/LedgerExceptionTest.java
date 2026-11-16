@@ -34,6 +34,7 @@ class LedgerExceptionTest {
             case IdempotencyKeyConflictException _ -> "idempotency-key-conflict";
             case TransactionNotFoundException _ -> "transaction-not-found";
             case RefundExceedsOriginalException _ -> "refund-exceeds-original";
+            case HoldAlreadySettledException _ -> "hold-already-settled";
         };
     }
 }
