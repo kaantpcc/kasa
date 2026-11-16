@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.AccountStatus;
 import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.account.Side;
@@ -378,7 +379,7 @@ abstract class LedgerContractTest {
     void totalBalanceIncludesHeldAmount() {
         fundSeller("600.00");
 
-        ledger.post(new Hold(HOLD_KEY, SELLER, lira("300.00")).place());
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
 
         assertThat(ledger.totalBalance(SELLER)).isEqualTo(lira("600.00"));
     }
@@ -386,10 +387,9 @@ abstract class LedgerContractTest {
     @Test
     void totalBalanceDropsAfterCapture() {
         fundSeller("600.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.post(hold.place());
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
 
-        ledger.post(hold.capture(BANK, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("300.00"));
 
         assertThat(ledger.totalBalance(SELLER)).isEqualTo(lira("300.00"));
     }
@@ -653,27 +653,155 @@ abstract class LedgerContractTest {
     @Test
     void rejectsReleaseAfterCapture() {
         fundSeller("600.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.placeHold(hold);
-        ledger.post(hold.capture(BANK, lira("300.00")));
-        Transaction release = hold.release();
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("300.00"));
 
-        assertThatThrownBy(() -> ledger.post(release))
-                .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller:42:wallet:held: available 0.00 TRY, requested 300.00 TRY");
+        assertThatThrownBy(() -> ledger.releaseHold(HOLD_KEY))
+                .isInstanceOf(HoldAlreadySettledException.class)
+                .hasMessage("Hold payout-1-hold is already settled");
     }
 
     @Test
     void rejectsCaptureAfterRelease() {
         fundSeller("600.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.placeHold(hold);
-        ledger.post(hold.release());
-        Transaction capture = hold.capture(BANK, lira("300.00"));
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        ledger.releaseHold(HOLD_KEY);
+        Money fullAmount = lira("300.00");
 
-        assertThatThrownBy(() -> ledger.post(capture))
-                .isInstanceOf(InsufficientFundsException.class)
-                .hasMessage("Insufficient available balance in seller:42:wallet:held: available 0.00 TRY, requested 300.00 TRY");
+        assertThatThrownBy(() -> ledger.captureHold(HOLD_KEY, BANK, fullAmount))
+                .isInstanceOf(HoldAlreadySettledException.class)
+                .hasMessage("Hold payout-1-hold is already settled");
+    }
+
+    @Test
+    void rejectsSettlingHoldTwiceWhileAnotherHoldKeepsHeldBalance() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        ledger.placeHold(new Hold(new IdempotencyKey("payout-2-hold"), SELLER, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("300.00"));
+
+        assertThatThrownBy(() -> ledger.releaseHold(HOLD_KEY))
+                .isInstanceOf(HoldAlreadySettledException.class);
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void captureHoldMovesCapturedAmountAndReturnsRemainder() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+
+        ledger.captureHold(HOLD_KEY, BANK, lira("200.00"));
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("400.00"));
+        assertThat(ledger.balance(BANK)).isEqualTo(lira("-200.00"));
+    }
+
+    @Test
+    void releaseHoldReturnsHeldAmountToAvailableAccount() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+
+        ledger.releaseHold(HOLD_KEY);
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("600.00"));
+    }
+
+    @Test
+    void ignoresRetryOfSameCapture() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("200.00"));
+
+        ledger.captureHold(HOLD_KEY, BANK, lira("200.00"));
+
+        assertThat(ledger.balance(BANK)).isEqualTo(lira("-200.00"));
+    }
+
+    @Test
+    void rejectsSecondCaptureWithDifferentAmount() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("200.00"));
+        Money differentAmount = lira("100.00");
+
+        assertThatThrownBy(() -> ledger.captureHold(HOLD_KEY, BANK, differentAmount))
+                .isInstanceOf(HoldAlreadySettledException.class);
+    }
+
+    @Test
+    void rejectsSettlingUnknownHold() {
+        IdempotencyKey unknownHold = new IdempotencyKey("payout-9-hold");
+
+        assertThatThrownBy(() -> ledger.releaseHold(unknownHold))
+                .isInstanceOf(TransactionNotFoundException.class)
+                .hasMessage("No transaction posted with idempotency key payout-9-hold");
+    }
+
+    @Test
+    void doesNotRememberHoldThatWasRejected() {
+        Hold holdWithoutFunds = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        assertThatThrownBy(() -> ledger.placeHold(holdWithoutFunds))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        assertThatThrownBy(() -> ledger.releaseHold(HOLD_KEY))
+                .isInstanceOf(TransactionNotFoundException.class);
+    }
+
+    @Test
+    void activeHoldsListsUnsettledHoldsInPlacementOrder() {
+        fundSeller("600.00");
+        Hold first = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        Hold second = new Hold(new IdempotencyKey("payout-2-hold"), SELLER, lira("200.00"));
+        Hold third = new Hold(new IdempotencyKey("payout-3-hold"), SELLER, lira("100.00"));
+        ledger.placeHold(first);
+        ledger.placeHold(second);
+        ledger.placeHold(third);
+
+        ledger.captureHold(HOLD_KEY, BANK, lira("300.00"));
+
+        assertThat(ledger.activeHolds(SELLER)).containsExactly(second, third);
+    }
+
+    @Test
+    void activeHoldsIsEmptyWithoutHolds() {
+        assertThat(ledger.activeHolds(SELLER)).isEmpty();
+    }
+
+    @Test
+    void openHoldableOpensBothAccounts() {
+        HoldableAccount newSeller = new HoldableAccount(
+                account("seller:43:wallet", Side.CREDIT, nonNegative()),
+                account("seller:43:wallet:held", Side.CREDIT, nonNegative()));
+
+        ledger.openHoldable(newSeller);
+
+        assertThat(ledger.status(newSeller.available())).isEqualTo(AccountStatus.OPEN);
+        assertThat(ledger.status(newSeller.held())).isEqualTo(AccountStatus.OPEN);
+    }
+
+    @Test
+    void openHoldableOpensNothingWhenOneAccountConflicts() {
+        Account newWallet = account("seller:43:wallet", Side.CREDIT, nonNegative());
+        HoldableAccount conflicting = new HoldableAccount(newWallet, account("commission", Side.CREDIT, nonNegative()));
+
+        assertThatThrownBy(() -> ledger.openHoldable(conflicting))
+                .isInstanceOf(AccountDefinitionConflictException.class);
+
+        assertThatThrownBy(() -> ledger.status(newWallet))
+                .isInstanceOf(AccountNotOpenException.class);
+    }
+
+    @Test
+    void rejectsNullHoldKeyForCapture() {
+        Money amount = lira("100.00");
+
+        assertThatThrownBy(() -> ledger.captureHold(null, BANK, amount))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("holdKey");
     }
 
     @Test

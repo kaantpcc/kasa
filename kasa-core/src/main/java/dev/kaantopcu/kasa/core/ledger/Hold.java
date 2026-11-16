@@ -39,13 +39,21 @@ public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
         if (remainder.isPositive()) {
             entries.add(increase(account.available(), remainder));
         }
-        return new Transaction(suffixedKey(CAPTURE_SUFFIX), entries);
+        return new Transaction(captureKey(), entries);
     }
 
     Transaction release() {
-        return new Transaction(suffixedKey(RELEASE_SUFFIX), List.of(
+        return new Transaction(releaseKey(), List.of(
                 decrease(account.held()),
                 increase(account.available(), amount)));
+    }
+
+    IdempotencyKey captureKey() {
+        return suffixedKey(CAPTURE_SUFFIX);
+    }
+
+    IdempotencyKey releaseKey() {
+        return suffixedKey(RELEASE_SUFFIX);
     }
 
     private Entry decrease(Account target) {

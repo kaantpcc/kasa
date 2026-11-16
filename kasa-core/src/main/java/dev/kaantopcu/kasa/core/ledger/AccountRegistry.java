@@ -18,13 +18,23 @@ final class AccountRegistry {
     private final Map<AccountId, AccountStatus> statusesById = new HashMap<>();
 
     void open(Account account) {
+        requireOpenable(account);
+        if (!accountsById.containsKey(account.id())) {
+            accountsById.put(account.id(), account);
+            statusesById.put(account.id(), AccountStatus.OPEN);
+        }
+    }
+
+    void openAll(List<Account> accountsToOpen) {
+        accountsToOpen.forEach(this::requireOpenable);
+        accountsToOpen.forEach(this::open);
+    }
+
+    private void requireOpenable(Account account) {
         if (accountsById.containsKey(account.id())) {
             requireSameDefinition(account);
             requireNotClosed(account);
-            return;
         }
-        accountsById.put(account.id(), account);
-        statusesById.put(account.id(), AccountStatus.OPEN);
     }
 
     void freeze(Account account) {

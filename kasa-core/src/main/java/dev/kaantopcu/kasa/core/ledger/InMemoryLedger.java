@@ -1,6 +1,11 @@
 package dev.kaantopcu.kasa.core.ledger;
 
-import dev.kaantopcu.kasa.core.account.*;
+import dev.kaantopcu.kasa.core.account.Account;
+import dev.kaantopcu.kasa.core.account.AccountId;
+import dev.kaantopcu.kasa.core.account.AccountStatus;
+import dev.kaantopcu.kasa.core.account.BalancePolicy;
+import dev.kaantopcu.kasa.core.account.HoldableAccount;
+import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.money.Money;
 
@@ -14,12 +19,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class InMemoryLedger implements Ledger {
 
     private final AccountRegistry accounts = new AccountRegistry();
     private final Journal journal = new Journal();
+    private final HoldBook holds = new HoldBook();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Clock clock;
 
@@ -31,6 +38,12 @@ public final class InMemoryLedger implements Ledger {
     public void open(Account account) {
         Objects.requireNonNull(account, "account");
         write(() -> accounts.open(account));
+    }
+
+    @Override
+    public void openHoldable(HoldableAccount account) {
+        Objects.requireNonNull(account, "account");
+        write(() -> accounts.openAll(List.of(account.available(), account.held())));
     }
 
     @Override
@@ -60,7 +73,21 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
-        write(() -> record(hold.place()));
+        write(() -> recordHold(hold));
+    }
+
+    @Override
+    public void captureHold(IdempotencyKey holdKey, Account destination, Money amount) {
+        Objects.requireNonNull(holdKey, "holdKey");
+        Objects.requireNonNull(destination, "destination");
+        Objects.requireNonNull(amount, "amount");
+        write(() -> settleHold(holdKey, hold -> hold.capture(destination, amount)));
+    }
+
+    @Override
+    public void releaseHold(IdempotencyKey holdKey) {
+        Objects.requireNonNull(holdKey, "holdKey");
+        write(() -> settleHold(holdKey, Hold::release));
     }
 
     @Override
@@ -100,6 +127,12 @@ public final class InMemoryLedger implements Ledger {
     public Money totalBalance(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
         return read(() -> calculateBalance(account.available()).add(calculateBalance(account.held())));
+    }
+
+    @Override
+    public List<Hold> activeHolds(HoldableAccount account) {
+        Objects.requireNonNull(account, "account");
+        return read(() -> activeHoldsOn(account));
     }
 
     @Override
@@ -144,6 +177,39 @@ public final class InMemoryLedger implements Ledger {
         PostedTransaction original = journal.postedWith(key)
                 .orElseThrow(() -> new TransactionNotFoundException(key));
         record(original.transaction().reversedOn(original.valueDate()));
+    }
+
+    private void recordHold(Hold hold) {
+        record(hold.place());
+        holds.remember(hold);
+    }
+
+    private void settleHold(IdempotencyKey holdKey, Function<Hold, Transaction> settlement) {
+        Hold hold = holds.find(holdKey).orElseThrow(() -> new TransactionNotFoundException(holdKey));
+        Transaction settlementTransaction = settlement.apply(hold);
+        Optional<PostedTransaction> existing = journal.postedWith(settlementTransaction.idempotencyKey());
+        if (existing.isPresent() && existing.get().transaction().equals(settlementTransaction)) {
+            return;
+        }
+        if (isSettled(hold)) {
+            throw new HoldAlreadySettledException(holdKey);
+        }
+        record(settlementTransaction);
+    }
+
+    private List<Hold> activeHoldsOn(HoldableAccount account) {
+        accounts.requireOpened(account.available());
+        List<Hold> active = new ArrayList<>();
+        for (Hold hold : holds.placedOn(account)) {
+            if (!isSettled(hold)) {
+                active.add(hold);
+            }
+        }
+        return List.copyOf(active);
+    }
+
+    private boolean isSettled(Hold hold) {
+        return journal.postedWith(hold.captureKey()).isPresent() || journal.postedWith(hold.releaseKey()).isPresent();
     }
 
     private void requireWithinRefundable(IdempotencyKey originalKey, Map<Account, Money> changes) {
