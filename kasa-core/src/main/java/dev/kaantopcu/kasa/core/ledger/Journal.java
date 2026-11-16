@@ -12,16 +12,16 @@ import java.util.Optional;
 // Not thread-safe on its own: InMemoryLedger calls it only while holding its read or write lock.
 final class Journal {
 
-    private final Map<IdempotencyKey, Transaction> transactionsByKey = new HashMap<>();
+    private final Map<IdempotencyKey, PostedTransaction> postedByKey = new HashMap<>();
     private final List<Entry> entries = new ArrayList<>();
 
-    void append(Transaction transaction) {
-        transactionsByKey.put(transaction.idempotencyKey(), transaction);
-        entries.addAll(transaction.entries());
+    void append(PostedTransaction posted) {
+        postedByKey.put(posted.transaction().idempotencyKey(), posted);
+        entries.addAll(posted.transaction().entries());
     }
 
-    Optional<Transaction> transactionWith(IdempotencyKey key) {
-        return Optional.ofNullable(transactionsByKey.get(key));
+    Optional<PostedTransaction> postedWith(IdempotencyKey key) {
+        return Optional.ofNullable(postedByKey.get(key));
     }
 
     Money balanceOf(Account account) {

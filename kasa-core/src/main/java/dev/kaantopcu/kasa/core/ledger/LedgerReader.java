@@ -7,6 +7,7 @@ import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.Money;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface LedgerReader {
 
@@ -19,4 +20,6 @@ public interface LedgerReader {
     Money balanceUnder(AccountId branch);
 
     AccountStatus status(Account account);
+
+    Optional<PostedTransaction> posted(IdempotencyKey key);
 }

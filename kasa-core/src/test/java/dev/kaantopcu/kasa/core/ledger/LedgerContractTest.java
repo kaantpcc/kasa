@@ -130,6 +130,20 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void rejectsSameKeyUsedWithDifferentDescription() {
+        ledger.post(sale("order-1"));
+        Transaction sameSaleWithDescription = Transaction.builder("order-1")
+                .debit(CUSTOMER_PAYMENTS, lira("1000.00"))
+                .credit(SELLER_WALLET, lira("900.00"))
+                .credit(COMMISSION, lira("100.00"))
+                .description("Order 1 payment")
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(sameSaleWithDescription))
+                .isInstanceOf(IdempotencyKeyConflictException.class);
+    }
+
+    @Test
     void ignoresEntriesOfAnotherAccounts() {
         ledger.post(sale("order-1"));
 

@@ -4,6 +4,6 @@ class InMemoryAccountStatusTest extends AccountStatusContractTest {
 
     @Override
     protected Ledger createLedger() {
-        return new InMemoryLedger();
+        return new InMemoryLedger(TestClocks.FIXED);
     }
 }

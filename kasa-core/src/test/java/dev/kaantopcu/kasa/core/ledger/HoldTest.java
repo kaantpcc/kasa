@@ -29,7 +29,7 @@ class HoldTest {
             account("seller:42:wallet:held", Side.CREDIT, nonNegative()));
     private static final IdempotencyKey HOLD_KEY = new IdempotencyKey("payout-1-hold");
 
-    private final InMemoryLedger ledger = new InMemoryLedger();
+    private final InMemoryLedger ledger = new InMemoryLedger(TestClocks.FIXED);
 
     @BeforeEach
     void openAccounts() {
