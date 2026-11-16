@@ -4,6 +4,6 @@ class InMemoryAccountHierarchyTest extends AccountHierarchyContractTest {
 
     @Override
     protected Ledger createLedger() {
-        return new InMemoryLedger();
+        return new InMemoryLedger(TestClocks.FIXED);
     }
 }

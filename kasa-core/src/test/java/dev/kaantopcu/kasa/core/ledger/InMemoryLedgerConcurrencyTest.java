@@ -4,6 +4,6 @@ class InMemoryLedgerConcurrencyTest extends LedgerConcurrencyContractTest {
 
     @Override
     protected Ledger createLedger() {
-        return new InMemoryLedger();
+        return new InMemoryLedger(TestClocks.FIXED);
     }
 }

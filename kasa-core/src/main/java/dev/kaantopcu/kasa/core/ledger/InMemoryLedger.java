@@ -8,6 +8,9 @@ import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.money.Money;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +24,11 @@ public final class InMemoryLedger implements Ledger {
     private final AccountRegistry accounts = new AccountRegistry();
     private final Journal journal = new Journal();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final Clock clock;
+
+    public InMemoryLedger(Clock clock) {
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
 
     @Override
     public void open(Account account) {
@@ -94,23 +102,36 @@ public final class InMemoryLedger implements Ledger {
         return read(() -> accounts.statusOf(account));
     }
 
+    @Override
+    public Optional<PostedTransaction> posted(IdempotencyKey key) {
+        Objects.requireNonNull(key, "key");
+        return read(() -> journal.postedWith(key));
+    }
+
     private void record(Transaction transaction) {
-        Optional<Transaction> existing = journal.transactionWith(transaction.idempotencyKey());
+        Optional<PostedTransaction> existing = journal.postedWith(transaction.idempotencyKey());
         if (existing.isPresent()) {
-            requireSameTransaction(existing.get(), transaction);
+            requireSameTransaction(existing.get().transaction(), transaction);
             return;
         }
         requireOpenedAccounts(transaction);
         Map<Account, Money> changes = balanceChanges(transaction);
         changes.forEach(accounts::requireMovementAllowed);
         changes.forEach(this::requireWithinPolicy);
-        journal.append(transaction);
+        journal.append(stamp(transaction));
     }
 
     private void recordReversal(IdempotencyKey key) {
-        Transaction original = journal.transactionWith(key)
-                .orElseThrow(() -> new TransactionNotFoundException(key));
+        Transaction original = journal.postedWith(key)
+                .orElseThrow(() -> new TransactionNotFoundException(key))
+                .transaction();
         record(original.reversed());
+    }
+
+    private PostedTransaction stamp(Transaction transaction) {
+        Instant recordedAt = clock.instant();
+        LocalDate recordingDay = LocalDate.ofInstant(recordedAt, clock.getZone());
+        return new PostedTransaction(transaction, recordedAt, transaction.valueDate().orElse(recordingDay));
     }
 
     private Money calculateBalance(Account account) {
@@ -143,7 +164,8 @@ public final class InMemoryLedger implements Ledger {
         switch (account.balancePolicy()) {
             case BalancePolicy.Unlimited() -> {
             }
-            case BalancePolicy.NonNegative() -> requireSpendable(account, balanceChange, Money.zero(account.currency()));
+            case BalancePolicy.NonNegative() ->
+                    requireSpendable(account, balanceChange, Money.zero(account.currency()));
             case BalancePolicy.Overdraft(Money limit) -> requireSpendable(account, balanceChange, limit);
         }
     }
