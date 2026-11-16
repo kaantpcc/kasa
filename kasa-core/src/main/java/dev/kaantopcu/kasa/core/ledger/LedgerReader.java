@@ -24,6 +24,8 @@ public interface LedgerReader {
 
     Money balanceUnder(AccountId branch);
 
+    TrialBalance trialBalance(Instant asOf);
+
     AccountStatus status(Account account);
 
     Optional<PostedTransaction> posted(IdempotencyKey key);

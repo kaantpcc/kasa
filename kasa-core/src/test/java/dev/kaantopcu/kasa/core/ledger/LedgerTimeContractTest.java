@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 abstract class LedgerTimeContractTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
+    private static final Currency USD = Currency.getInstance("USD");
     private static final Instant START = Instant.parse("2026-11-16T09:00:00Z");
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT, unlimited());
     private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT, nonNegative());
@@ -263,6 +264,87 @@ abstract class LedgerTimeContractTest {
         assertThatThrownBy(() -> ledger.statement(SELLER_WALLET, later, START))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Statement period must not end before it starts, got 2026-11-16T10:00:00Z to 2026-11-16T09:00:00Z");
+    }
+
+    @Test
+    void trialBalanceShowsTotalsOfEachOpenAccount() {
+        ledger.post(sale().build());
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.lines()).containsExactly(
+                new TrialBalanceLine(CUSTOMER_PAYMENTS, lira("900.00"), lira("0.00")),
+                new TrialBalanceLine(SELLER_WALLET, lira("0.00"), lira("900.00")));
+    }
+
+    @Test
+    void trialBalanceShowsBalanceOnEachAccountsNormalSide() {
+        ledger.post(sale().build());
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.lines())
+                .extracting(TrialBalanceLine::balance)
+                .containsExactly(lira("900.00"), lira("900.00"));
+    }
+
+    @Test
+    void trialBalanceIsBalancedAfterSalesAndReversal() {
+        postTwoSalesAnHourApart();
+        ledger.reverse(ORDER_KEY);
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofDays(1)));
+
+        assertThat(trialBalance.totalDebits(TRY)).isEqualTo(lira("1900.00"));
+        assertThat(trialBalance.totalCredits(TRY)).isEqualTo(lira("1900.00"));
+        assertThat(trialBalance.isBalanced()).isTrue();
+    }
+
+    @Test
+    void trialBalanceExcludesTransactionsRecordedAtOrAfterAsOf() {
+        postTwoSalesAnHourApart();
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.totalDebits(TRY)).isEqualTo(lira("900.00"));
+        assertThat(trialBalance.totalCredits(TRY)).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void trialBalanceListsAccountsWithoutMovementWithZeroTotals() {
+        TrialBalance trialBalance = ledger.trialBalance(START);
+
+        assertThat(trialBalance.lines()).containsExactly(
+                new TrialBalanceLine(CUSTOMER_PAYMENTS, lira("0.00"), lira("0.00")),
+                new TrialBalanceLine(SELLER_WALLET, lira("0.00"), lira("0.00")));
+        assertThat(trialBalance.isBalanced()).isTrue();
+    }
+
+    @Test
+    void trialBalanceTotalsEachCurrencySeparately() {
+        Account dollarPayments = new Account(new AccountId("customer-payments-usd"), USD, Side.DEBIT, unlimited());
+        Account dollarWallet = new Account(new AccountId("seller:42:wallet-usd"), USD, Side.CREDIT, nonNegative());
+        ledger.open(dollarPayments);
+        ledger.open(dollarWallet);
+        ledger.post(sale().build());
+        ledger.post(Transaction.builder("order-usd-1")
+                .debit(dollarPayments, Money.of("50.00", USD))
+                .credit(dollarWallet, Money.of("50.00", USD))
+                .build());
+
+        TrialBalance trialBalance = ledger.trialBalance(START.plus(Duration.ofHours(1)));
+
+        assertThat(trialBalance.totalDebits(TRY)).isEqualTo(lira("900.00"));
+        assertThat(trialBalance.totalDebits(USD)).isEqualTo(Money.of("50.00", USD));
+        assertThat(trialBalance.totalCredits(USD)).isEqualTo(Money.of("50.00", USD));
+        assertThat(trialBalance.isBalanced()).isTrue();
+    }
+
+    @Test
+    void rejectsNullAsOfForTrialBalance() {
+        assertThatThrownBy(() -> ledger.trialBalance(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("asOf");
     }
 
     @Test

@@ -48,6 +48,10 @@ final class AccountRegistry {
         return statusesById.get(account.id());
     }
 
+    List<Account> opened() {
+        return List.copyOf(accountsById.values());
+    }
+
     List<Account> accountsWithin(AccountId branch) {
         List<Account> branchAccounts = new ArrayList<>();
         for (Account account : accountsById.values()) {
