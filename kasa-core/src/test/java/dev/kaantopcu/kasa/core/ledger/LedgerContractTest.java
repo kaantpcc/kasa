@@ -389,7 +389,7 @@ abstract class LedgerContractTest {
         Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
         ledger.post(hold.place());
 
-        ledger.post(hold.capture(BANK));
+        ledger.post(hold.capture(BANK, lira("300.00")));
 
         assertThat(ledger.totalBalance(SELLER)).isEqualTo(lira("300.00"));
     }
@@ -655,7 +655,7 @@ abstract class LedgerContractTest {
         fundSeller("600.00");
         Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
         ledger.placeHold(hold);
-        ledger.post(hold.capture(BANK));
+        ledger.post(hold.capture(BANK, lira("300.00")));
         Transaction release = hold.release();
 
         assertThatThrownBy(() -> ledger.post(release))
@@ -669,7 +669,7 @@ abstract class LedgerContractTest {
         Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
         ledger.placeHold(hold);
         ledger.post(hold.release());
-        Transaction capture = hold.capture(BANK);
+        Transaction capture = hold.capture(BANK, lira("300.00"));
 
         assertThatThrownBy(() -> ledger.post(capture))
                 .isInstanceOf(InsufficientFundsException.class)

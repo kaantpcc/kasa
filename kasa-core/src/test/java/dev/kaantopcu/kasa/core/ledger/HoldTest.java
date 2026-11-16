@@ -62,7 +62,7 @@ class HoldTest {
         Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
         ledger.post(hold.place());
 
-        ledger.post(hold.capture(BANK));
+        ledger.post(hold.capture(BANK, lira("300.00")));
 
         assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("300.00"));
         assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
@@ -84,7 +84,7 @@ class HoldTest {
     void captureUsesSuffixedHoldKey() {
         Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
 
-        assertThat(hold.capture(BANK).idempotencyKey())
+        assertThat(hold.capture(BANK, lira("300.00")).idempotencyKey())
                 .isEqualTo(new IdempotencyKey("payout-1-hold:capture"));
     }
 
@@ -100,9 +100,82 @@ class HoldTest {
     void rejectsNullCaptureDestination() {
         Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
 
-        assertThatThrownBy(() -> hold.capture(null))
+        assertThatThrownBy(() -> hold.capture(null, lira("300.00")))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("destination");
+    }
+
+    @Test
+    void partialCaptureReturnsRemainderToAvailableAccount() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.post(hold.place());
+
+        ledger.post(hold.capture(BANK, lira("200.00")));
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("400.00"));
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.balance(BANK)).isEqualTo(lira("-200.00"));
+    }
+
+    @Test
+    void partialCaptureWritesRemainderEntry() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        Transaction capture = hold.capture(BANK, lira("200.00"));
+
+        assertThat(capture.entries()).containsExactly(
+                new Entry(SELLER.held(), lira("300.00"), Side.DEBIT),
+                new Entry(BANK, lira("200.00"), Side.CREDIT),
+                new Entry(SELLER.available(), lira("100.00"), Side.CREDIT));
+    }
+
+    @Test
+    void fullCaptureHasNoRemainderEntry() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        Transaction capture = hold.capture(BANK, lira("300.00"));
+
+        assertThat(capture.entries()).hasSize(2);
+    }
+
+    @Test
+    void rejectsCapturingMoreThanHeld() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        Money tooMuch = lira("300.01");
+
+        assertThatThrownBy(() -> hold.capture(BANK, tooMuch))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Captured amount must be positive and at most 300.00 TRY, got 300.01 TRY");
+    }
+
+    @Test
+    void rejectsZeroCapture() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        Money nothing = lira("0.00");
+
+        assertThatThrownBy(() -> hold.capture(BANK, nothing))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Captured amount must be positive and at most 300.00 TRY, got 0.00 TRY");
+    }
+
+    @Test
+    void rejectsCaptureInDifferentCurrency() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        Money dollars = Money.of("100.00", USD);
+
+        assertThatThrownBy(() -> hold.capture(BANK, dollars))
+                .isInstanceOf(CurrencyMismatchException.class)
+                .hasMessage("Cannot combine TRY with USD");
+    }
+
+    @Test
+    void rejectsNullCapturedAmount() {
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        assertThatThrownBy(() -> hold.capture(BANK, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("capturedAmount");
     }
 
     @Test

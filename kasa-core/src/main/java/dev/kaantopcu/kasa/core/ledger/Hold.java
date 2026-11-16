@@ -5,6 +5,7 @@ import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.money.Money;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -21,39 +22,52 @@ public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
         requireAccountCurrency(account, amount);
     }
 
-    public Transaction place() {
+    Transaction place() {
         return new Transaction(key, List.of(
                 decrease(account.available()),
-                increase(account.held())));
+                increase(account.held(), amount)));
     }
 
-    public Transaction capture(Account destination) {
+    Transaction capture(Account destination, Money capturedAmount) {
         Objects.requireNonNull(destination, "destination");
-        return new Transaction(suffixedKey(CAPTURE_SUFFIX), List.of(
-                decrease(account.held()),
-                counterpart(destination)));
+        Objects.requireNonNull(capturedAmount, "capturedAmount");
+        requireCapturable(capturedAmount);
+        List<Entry> entries = new ArrayList<>();
+        entries.add(decrease(account.held()));
+        entries.add(new Entry(destination, capturedAmount, account.held().normalBalance()));
+        Money remainder = amount.subtract(capturedAmount);
+        if (remainder.isPositive()) {
+            entries.add(increase(account.available(), remainder));
+        }
+        return new Transaction(suffixedKey(CAPTURE_SUFFIX), entries);
     }
 
-    public Transaction release() {
+    Transaction release() {
         return new Transaction(suffixedKey(RELEASE_SUFFIX), List.of(
                 decrease(account.held()),
-                increase(account.available())));
+                increase(account.available(), amount)));
     }
 
     private Entry decrease(Account target) {
         return new Entry(target, amount, target.normalBalance().opposite());
     }
 
-    private Entry increase(Account target) {
-        return new Entry(target, amount, target.normalBalance());
-    }
-
-    private Entry counterpart(Account destination) {
-        return new Entry(destination, amount, account.held().normalBalance());
+    private static Entry increase(Account target, Money value) {
+        return new Entry(target, value, target.normalBalance());
     }
 
     private IdempotencyKey suffixedKey(String suffix) {
         return new IdempotencyKey(key.value() + suffix);
+    }
+
+    private void requireCapturable(Money capturedAmount) {
+        if (!capturedAmount.isPositive() || amount.isLessThan(capturedAmount)) {
+            throw new IllegalArgumentException("Captured amount must be positive and at most %s %s, got %s %s".formatted(
+                    amount.amount().toPlainString(),
+                    amount.currency().getCurrencyCode(),
+                    capturedAmount.amount().toPlainString(),
+                    capturedAmount.currency().getCurrencyCode()));
+        }
     }
 
     private static void requirePositive(Money amount) {

@@ -237,7 +237,7 @@ abstract class AccountStatusContractTest {
         ledger.placeHold(hold);
         ledger.freeze(SELLER_WALLET);
 
-        ledger.post(hold.capture(BANK));
+        ledger.post(hold.capture(BANK, lira("300.00")));
 
         assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
         assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("600.00"));
