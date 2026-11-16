@@ -6,7 +6,10 @@ import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.LocalDate;
 import java.util.Currency;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,6 +22,7 @@ class TransactionBuilderTest {
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
     private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT);
     private static final Account COMMISSION = account("commission", Side.CREDIT);
+    private static final LocalDate VALUE_DATE = LocalDate.of(2026, 11, 16);
 
     @Test
     void buildsTransactionWithEntriesInOrder() {
@@ -74,6 +78,61 @@ class TransactionBuilderTest {
         assertThat(transaction.entries()).hasSize(2);
     }
 
+    @Test
+    void leavesValueDateAndDescriptionEmptyByDefault() {
+        Transaction transaction = sale().build();
+
+        assertThat(transaction.valueDate()).isEmpty();
+        assertThat(transaction.description()).isEmpty();
+    }
+
+    @Test
+    void keepsValueDateGivenToBuilder() {
+        Transaction transaction = sale().valueDate(VALUE_DATE).build();
+
+        assertThat(transaction.valueDate()).contains(VALUE_DATE);
+    }
+
+    @Test
+    void keepsDescriptionGivenToBuilder() {
+        Transaction transaction = sale().description("Order 123 payment").build();
+
+        assertThat(transaction.description()).contains("Order 123 payment");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   "})
+    void rejectsBlankDescription(String description) {
+        Transaction.Builder builder = sale().description(description);
+
+        assertThatThrownBy(() -> builder.build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Transaction description must not be blank");
+    }
+
+    @Test
+    void rejectsNullValueDate() {
+        Transaction.Builder builder = sale();
+
+        assertThatThrownBy(() -> builder.valueDate(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("valueDate");
+    }
+
+    @Test
+    void rejectsNullDescription() {
+        Transaction.Builder builder = sale();
+
+        assertThatThrownBy(() -> builder.description(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("description");
+    }
+
+    private static Transaction.Builder sale() {
+        return Transaction.builder("order-123")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(SELLER_WALLET, lira("100.00"));
+    }
 
     private static Account account(String id, Side normalBalance) {
         return new Account(new AccountId(id), TRY, normalBalance, BalancePolicy.unlimited());
