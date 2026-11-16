@@ -140,10 +140,9 @@ public final class InMemoryLedger implements Ledger {
     }
 
     private void recordReversal(IdempotencyKey key) {
-        Transaction original = journal.postedWith(key)
-                .orElseThrow(() -> new TransactionNotFoundException(key))
-                .transaction();
-        record(original.reversed());
+        PostedTransaction original = journal.postedWith(key)
+                .orElseThrow(() -> new TransactionNotFoundException(key));
+        record(original.transaction().reversedOn(original.valueDate()));
     }
 
     private PostedTransaction stamp(Transaction transaction) {

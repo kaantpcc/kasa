@@ -13,8 +13,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries, Optional<LocalDate> valueDate,
-                          Optional<String> description) {
+public record Transaction(IdempotencyKey idempotencyKey,
+                          List<Entry> entries,
+                          Optional<LocalDate> valueDate,
+                          Optional<String> description,
+                          Optional<IdempotencyKey> refundOf) {
 
     private static final String REVERSAL_SUFFIX = ":reversal";
 
@@ -23,14 +26,16 @@ public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries, Op
         Objects.requireNonNull(entries, "entries");
         Objects.requireNonNull(valueDate, "valueDate");
         Objects.requireNonNull(description, "description");
+        Objects.requireNonNull(refundOf, "refundOf");
         entries = List.copyOf(entries);
         requireEntries(entries);
         requireBalancedPerCurrency(entries);
         description.ifPresent(Transaction::requireNonBlankDescription);
+        refundOf.ifPresent(original -> requireNotRefundingItself(idempotencyKey, original));
     }
 
     public Transaction(IdempotencyKey idempotencyKey, List<Entry> entries) {
-        this(idempotencyKey, entries, Optional.empty(), Optional.empty());
+        this(idempotencyKey, entries, Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     private static void requireEntries(List<Entry> entries) {
@@ -59,6 +64,12 @@ public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries, Op
         }
     }
 
+    private static void requireNotRefundingItself(IdempotencyKey key, IdempotencyKey original) {
+        if (key.equals(original)) {
+            throw new IllegalArgumentException("Transaction %s cannot refund itself".formatted(key.value()));
+        }
+    }
+
     private static Money signedAmount(Entry entry) {
         return switch (entry.side()) {
             case DEBIT -> entry.amount();
@@ -66,12 +77,14 @@ public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries, Op
         };
     }
 
-    public Transaction reversed() {
+    Transaction reversedOn(LocalDate valueDate) {
+        Objects.requireNonNull(valueDate, "valueDate");
         List<Entry> reversedEntries = new ArrayList<>();
         for (Entry entry : entries) {
             reversedEntries.add(entry.reversed());
         }
-        return new Transaction(new IdempotencyKey(idempotencyKey.value() + REVERSAL_SUFFIX), reversedEntries);
+        return new Transaction(new IdempotencyKey(idempotencyKey.value() + REVERSAL_SUFFIX), reversedEntries,
+                Optional.of(valueDate), Optional.empty(), Optional.of(idempotencyKey));
     }
 
     List<Entry> entriesFor(Account account) {
@@ -93,6 +106,7 @@ public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries, Op
         private final List<Entry> entries = new ArrayList<>();
         private LocalDate valueDate;
         private String description;
+        private IdempotencyKey refundOf;
 
         private Builder(IdempotencyKey idempotencyKey) {
             this.idempotencyKey = idempotencyKey;
@@ -118,8 +132,15 @@ public record Transaction(IdempotencyKey idempotencyKey, List<Entry> entries, Op
             return this;
         }
 
+        public Builder refundOf(String originalKey) {
+            this.refundOf = new IdempotencyKey(originalKey);
+            return this;
+        }
+
         public Transaction build() {
-            return new Transaction(idempotencyKey, entries, Optional.ofNullable(valueDate), Optional.ofNullable(description));
+            return new Transaction(idempotencyKey, entries,
+                    Optional.ofNullable(valueDate), Optional.ofNullable(description),
+                    Optional.ofNullable(refundOf));
         }
     }
 }

@@ -144,6 +144,17 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void rejectsSameKeyUsedWithDifferentRefundLink() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+
+        Transaction sameRefundForAnotherOrder = refund("refund-1", "order-2");
+
+        assertThatThrownBy(() -> ledger.post(sameRefundForAnotherOrder))
+                .isInstanceOf(IdempotencyKeyConflictException.class);
+    }
+
+    @Test
     void ignoresEntriesOfAnotherAccounts() {
         ledger.post(sale("order-1"));
 
@@ -583,6 +594,14 @@ abstract class LedgerContractTest {
                 .debit(CUSTOMER_PAYMENTS, lira("1000.00"))
                 .credit(SELLER_WALLET, lira("900.00"))
                 .credit(COMMISSION, lira("100.00"))
+                .build();
+    }
+
+    private static Transaction refund(String refundKey, String orderKey) {
+        return Transaction.builder(refundKey)
+                .refundOf(orderKey)
+                .debit(SELLER_WALLET, lira("300.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("300.00"))
                 .build();
     }
 

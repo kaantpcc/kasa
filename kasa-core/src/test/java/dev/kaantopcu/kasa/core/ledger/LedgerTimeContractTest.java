@@ -111,6 +111,35 @@ abstract class LedgerTimeContractTest {
     }
 
     @Test
+    void reversalIsLinkedToOriginalTransaction() {
+        ledger.post(sale().build());
+
+        ledger.reverse(ORDER_KEY);
+
+        assertThat(postedReversal().transaction().refundOf()).contains(ORDER_KEY);
+    }
+
+    @Test
+    void reversalCarriesOriginalValueDate() {
+        ledger.post(sale().valueDate(LocalDate.of(2026, 11, 20)).build());
+        clock.advance(Duration.ofDays(1));
+
+        ledger.reverse(ORDER_KEY);
+
+        assertThat(postedReversal().valueDate()).isEqualTo(LocalDate.of(2026, 11, 20));
+    }
+
+    @Test
+    void reversalUsesOriginalRecordingDayWhenOriginalHadNoValueDate() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofDays(2));
+
+        ledger.reverse(ORDER_KEY);
+
+        assertThat(postedReversal().valueDate()).isEqualTo(LocalDate.of(2026, 11, 16));
+    }
+
+    @Test
     void keepsFirstRecordedTimeWhenTransactionIsRetried() {
         ledger.post(sale().build());
         clock.advance(Duration.ofHours(1));
@@ -373,6 +402,10 @@ abstract class LedgerTimeContractTest {
         ledger.post(sale().build());
         clock.advance(Duration.ofHours(1));
         ledger.post(secondSale());
+    }
+
+    private PostedTransaction postedReversal() {
+        return ledger.posted(new IdempotencyKey("order-1:reversal")).orElseThrow();
     }
 
     private static PostedTransaction postedOrder(Ledger ledger) {
