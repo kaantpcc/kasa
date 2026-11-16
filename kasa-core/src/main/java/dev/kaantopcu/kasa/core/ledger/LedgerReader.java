@@ -18,6 +18,8 @@ public interface LedgerReader {
 
     List<Entry> entries(Account account);
 
+    Statement statement(Account account, Instant from, Instant to);
+
     Money totalBalance(HoldableAccount account);
 
     Money balanceUnder(AccountId branch);

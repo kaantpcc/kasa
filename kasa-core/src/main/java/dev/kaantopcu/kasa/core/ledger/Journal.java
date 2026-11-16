@@ -59,6 +59,19 @@ final class Journal {
         return List.copyOf(accountEntries);
     }
 
+    List<PostedTransaction> postedBetween(Instant from, Instant to) {
+        List<PostedTransaction> between = new ArrayList<>();
+        for (PostedTransaction posted : postedInOrder) {
+            if (!posted.recordedAt().isBefore(to)) {
+                break;
+            }
+            if (!posted.recordedAt().isBefore(from)) {
+                between.add(posted);
+            }
+        }
+        return List.copyOf(between);
+    }
+
     private static Money sumOf(Account account, List<Entry> entries) {
         Money balance = Money.zero(account.currency());
         for (Entry entry : entries) {

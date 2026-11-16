@@ -11,6 +11,7 @@ import dev.kaantopcu.kasa.core.money.Money;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,6 +93,14 @@ public final class InMemoryLedger implements Ledger {
     }
 
     @Override
+    public Statement statement(Account account, Instant from, Instant to) {
+        Objects.requireNonNull(account, "account");
+        Objects.requireNonNull(from, "from");
+        Objects.requireNonNull(to, "to");
+        return read(() -> buildStatement(account, from, to));
+    }
+
+    @Override
     public Money totalBalance(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
         return read(() -> calculateBalance(account.available()).add(calculateBalance(account.held())));
@@ -163,6 +172,28 @@ public final class InMemoryLedger implements Ledger {
     private List<Entry> entriesOf(Account account) {
         accounts.requireOpened(account);
         return journal.entriesOf(account);
+    }
+
+    private Statement buildStatement(Account account, Instant from, Instant to) {
+        accounts.requireOpened(account);
+        requireOrderedPeriod(from, to);
+        Money openingBalance = journal.balanceBefore(account, from);
+        Money runningBalance = openingBalance;
+        List<StatementLine> lines = new ArrayList<>();
+        for (PostedTransaction posted : journal.postedBetween(from, to)) {
+            for (Entry entry : posted.transaction().entriesFor(account)) {
+                runningBalance = runningBalance.add(entry.balanceChange());
+                lines.add(new StatementLine(posted, entry, runningBalance));
+            }
+        }
+        return new Statement(openingBalance, lines, runningBalance);
+    }
+
+    private static void requireOrderedPeriod(Instant from, Instant to) {
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("Statement period must not end before it starts, got %s to %s"
+                    .formatted(from, to));
+        }
     }
 
     private Money calculateBranchBalance(AccountId branch) {

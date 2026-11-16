@@ -188,6 +188,92 @@ abstract class LedgerTimeContractTest {
     }
 
     @Test
+    void statementShowsOpeningBalanceLinesAndClosingBalance() {
+        postTwoSalesAnHourApart();
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofMinutes(30)), START.plus(Duration.ofHours(2)));
+
+        assertThat(statement.openingBalance()).isEqualTo(lira("900.00"));
+        assertThat(statement.lines()).hasSize(1);
+        assertThat(statement.lines().getFirst().balanceAfter()).isEqualTo(lira("1000.00"));
+        assertThat(statement.closingBalance()).isEqualTo(lira("1000.00"));
+    }
+
+    @Test
+    void statementLineCarriesPostedTransactionDetails() {
+        ledger.post(sale().valueDate(LocalDate.of(2026, 11, 20)).description("Order 1 payment").build());
+
+        StatementLine line = ledger.statement(SELLER_WALLET, START, START.plus(Duration.ofHours(1))).lines().getFirst();
+
+        assertThat(line.posted().recordedAt()).isEqualTo(START);
+        assertThat(line.posted().valueDate()).isEqualTo(LocalDate.of(2026, 11, 20));
+        assertThat(line.posted().transaction().description()).contains("Order 1 payment");
+        assertThat(line.entry()).isEqualTo(new Entry(SELLER_WALLET, lira("900.00"), Side.CREDIT));
+        assertThat(line.balanceAfter()).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void statementIncludesLineRecordedAtStartOfPeriod() {
+        postTwoSalesAnHourApart();
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofHours(1)), START.plus(Duration.ofHours(2)));
+
+        assertThat(statement.lines())
+                .extracting(line -> line.posted().transaction().idempotencyKey())
+                .containsExactly(new IdempotencyKey("order-2"));
+    }
+
+    @Test
+    void statementExcludesLineRecordedAtEndOfPeriod() {
+        postTwoSalesAnHourApart();
+
+        Statement statement = ledger.statement(SELLER_WALLET, START, START.plus(Duration.ofHours(1)));
+
+        assertThat(statement.lines())
+                .extracting(line -> line.posted().transaction().idempotencyKey())
+                .containsExactly(ORDER_KEY);
+        assertThat(statement.closingBalance()).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void emptyPeriodHasEqualOpeningAndClosingBalance() {
+        ledger.post(sale().build());
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofHours(1)), START.plus(Duration.ofHours(2)));
+
+        assertThat(statement.lines()).isEmpty();
+        assertThat(statement.openingBalance()).isEqualTo(lira("900.00"));
+        assertThat(statement.closingBalance()).isEqualTo(lira("900.00"));
+    }
+
+    @Test
+    void closingBalanceMatchesBalanceAsOfEndOfPeriod() {
+        postTwoSalesAnHourApart();
+        Instant end = START.plus(Duration.ofMinutes(90));
+
+        Statement statement = ledger.statement(SELLER_WALLET, START.plus(Duration.ofMinutes(30)), end);
+
+        assertThat(statement.closingBalance()).isEqualTo(ledger.balanceAsOf(SELLER_WALLET, end));
+    }
+
+    @Test
+    void rejectsPeriodEndingBeforeItStarts() {
+        Instant later = START.plus(Duration.ofHours(1));
+
+        assertThatThrownBy(() -> ledger.statement(SELLER_WALLET, later, START))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Statement period must not end before it starts, got 2026-11-16T10:00:00Z to 2026-11-16T09:00:00Z");
+    }
+
+    @Test
+    void rejectsStatementForAccountThatIsNotOpened() {
+        Account misspelledWallet = account("seler:42:wallet", Side.CREDIT, nonNegative());
+
+        assertThatThrownBy(() -> ledger.statement(misspelledWallet, START, START.plus(Duration.ofHours(1))))
+                .isInstanceOf(AccountNotOpenException.class);
+    }
+
+    @Test
     void rejectsNullKeyForPosted() {
         assertThatThrownBy(() -> ledger.posted(null))
                 .isInstanceOf(NullPointerException.class)
@@ -199,6 +285,12 @@ abstract class LedgerTimeContractTest {
         openedLedger.open(CUSTOMER_PAYMENTS);
         openedLedger.open(SELLER_WALLET);
         return openedLedger;
+    }
+
+    private void postTwoSalesAnHourApart() {
+        ledger.post(sale().build());
+        clock.advance(Duration.ofHours(1));
+        ledger.post(secondSale());
     }
 
     private static PostedTransaction postedOrder(Ledger ledger) {
