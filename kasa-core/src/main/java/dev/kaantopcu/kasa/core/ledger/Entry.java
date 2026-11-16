@@ -1,9 +1,9 @@
 package dev.kaantopcu.kasa.core.ledger;
 
-import dev.kaantopcu.kasa.core.money.Money;
-import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.Side;
+import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
+import dev.kaantopcu.kasa.core.money.Money;
 
 import java.util.Objects;
 
@@ -19,6 +19,13 @@ public record Entry(Account account, Money amount, Side side) {
 
     public Entry reversed() {
         return new Entry(account, amount, side.opposite());
+    }
+
+    public Money balanceChange() {
+        if (side == account.normalBalance()) {
+            return amount;
+        }
+        return amount.negate();
     }
 
     private static void requirePositive(Money amount) {

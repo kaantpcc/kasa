@@ -87,4 +87,18 @@ class EntryTest {
 
         assertThat(reversed).isEqualTo(new Entry(SELLER_WALLET, Money.of("900.00", TRY), Side.DEBIT));
     }
+
+    @Test
+    void increasesBalanceWhenOnAccountNormalSide() {
+        Entry sale = new Entry(SELLER_WALLET, Money.of("900.00", TRY), Side.CREDIT);
+
+        assertThat(sale.balanceChange()).isEqualTo(Money.of("900.00", TRY));
+    }
+
+    @Test
+    void decreasesBalanceWhenOnOppositeSide() {
+        Entry withdrawal = new Entry(SELLER_WALLET, Money.of("300.00", TRY), Side.DEBIT);
+
+        assertThat(withdrawal.balanceChange()).isEqualTo(Money.of("-300.00", TRY));
+    }
 }

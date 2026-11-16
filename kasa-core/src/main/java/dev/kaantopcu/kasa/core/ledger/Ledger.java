@@ -1,4 +1,4 @@
 package dev.kaantopcu.kasa.core.ledger;
 
-public interface Ledger extends LedgerWriter, LedgerReader {
+public interface Ledger extends AccountAdministration, LedgerWriter, LedgerReader {
 }
