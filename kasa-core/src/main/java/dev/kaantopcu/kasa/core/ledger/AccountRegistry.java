@@ -69,11 +69,12 @@ final class AccountRegistry {
     }
 
     void requireMovementAllowed(Account account, Money balanceChange) {
-        switch (statusesById.get(account.id())) {
-            case OPEN -> {
-            }
-            case FROZEN -> requireNoOutgoingMoney(account, balanceChange);
-            case CLOSED -> throw new AccountClosedException(account.id());
+        AccountStatus status = statusesById.get(account.id());
+        if (!status.acceptsMovements()) {
+            throw new AccountClosedException(account.id());
+        }
+        if (balanceChange.isNegative() && !status.allowsOutgoingMoney()) {
+            throw new AccountFrozenException(account.id());
         }
     }
 
@@ -94,12 +95,6 @@ final class AccountRegistry {
     private void requireNotClosed(Account account) {
         if (statusesById.get(account.id()) == AccountStatus.CLOSED) {
             throw new AccountClosedException(account.id());
-        }
-    }
-
-    private static void requireNoOutgoingMoney(Account account, Money balanceChange) {
-        if (balanceChange.isNegative()) {
-            throw new AccountFrozenException(account.id());
         }
     }
 
