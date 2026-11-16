@@ -86,9 +86,9 @@ public final class InMemoryLedger implements Ledger {
     }
 
     @Override
-    public List<Entry> statement(Account account) {
+    public List<Entry> entries(Account account) {
         Objects.requireNonNull(account, "account");
-        return read(() -> statementOf(account));
+        return read(() -> entriesOf(account));
     }
 
     @Override
@@ -160,7 +160,7 @@ public final class InMemoryLedger implements Ledger {
         return journal.balanceBefore(account, asOf);
     }
 
-    private List<Entry> statementOf(Account account) {
+    private List<Entry> entriesOf(Account account) {
         accounts.requireOpened(account);
         return journal.entriesOf(account);
     }

@@ -16,7 +16,7 @@ public interface LedgerReader {
 
     Money balanceAsOf(Account account, Instant asOf);
 
-    List<Entry> statement(Account account);
+    List<Entry> entries(Account account);
 
     Money totalBalance(HoldableAccount account);
 
