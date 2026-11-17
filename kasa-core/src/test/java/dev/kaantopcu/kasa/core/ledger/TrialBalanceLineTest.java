@@ -35,10 +35,19 @@ class TrialBalanceLineTest {
     }
 
     @Test
-    void rejectsTotalsInDifferentCurrencyThanAccount() {
+    void rejectsDebitsInDifferentCurrencyThanAccount() {
         Money dollars = Money.of("100.00", USD);
 
         assertThatThrownBy(() -> new TrialBalanceLine(SELLER_WALLET, dollars, lira("0.00")))
+                .isInstanceOf(CurrencyMismatchException.class)
+                .hasMessage("Cannot combine TRY with USD");
+    }
+
+    @Test
+    void rejectsCreditsInDifferentCurrencyThanAccount() {
+        Money dollars = Money.of("100.00", USD);
+
+        assertThatThrownBy(() -> new TrialBalanceLine(SELLER_WALLET, lira("0.00"), dollars))
                 .isInstanceOf(CurrencyMismatchException.class)
                 .hasMessage("Cannot combine TRY with USD");
     }
