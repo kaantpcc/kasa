@@ -18,6 +18,7 @@
         <jacoco.version>0.8.15</jacoco.version>
         <jacoco.minimum.line>0.95</jacoco.minimum.line>
         <jacoco.minimum.branch>0.95</jacoco.minimum.branch>
+        <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -36,6 +37,15 @@
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>${sonar-maven-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <groupId>org.jacoco</groupId>
