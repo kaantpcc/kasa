@@ -8,6 +8,7 @@ import dev.kaantopcu.kasa.core.money.Money;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 public interface LedgerReader {
@@ -31,6 +32,11 @@ public interface LedgerReader {
     AccountStatus status(Account account);
 
     Optional<PostedTransaction> posted(IdempotencyKey key);
+
+    default Optional<PostedTransaction> posted(String key) {
+        Objects.requireNonNull(key, "key");
+        return posted(new IdempotencyKey(key));
+    }
 
     Optional<IdempotencyKey> verifyChain();
 }

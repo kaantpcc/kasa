@@ -369,8 +369,56 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void reversesTransactionByTextKey() {
+        ledger.post(sale("order-1"));
+
+        ledger.reverse("order-1");
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void readsPostedTransactionByTextKey() {
+        ledger.post(sale("order-1"));
+
+        assertThat(ledger.posted("order-1")).isEqualTo(ledger.posted(new IdempotencyKey("order-1")));
+        assertThat(ledger.posted("order-1")).isPresent();
+    }
+
+    @Test
+    void capturesHoldByTextKey() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+
+        ledger.captureHold("payout-1-hold", BANK, lira("300.00"));
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.balance(BANK)).isEqualTo(lira("-300.00"));
+    }
+
+    @Test
+    void releasesHoldByTextKey() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+
+        ledger.releaseHold("payout-1-hold");
+
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("600.00"));
+    }
+
+    @Test
+    void rejectsNullTextKeys() {
+        Money amount = lira("100.00");
+
+        assertThatThrownBy(() -> ledger.reverse((String) null)).hasMessage("key");
+        assertThatThrownBy(() -> ledger.posted((String) null)).hasMessage("key");
+        assertThatThrownBy(() -> ledger.releaseHold((String) null)).hasMessage("holdKey");
+        assertThatThrownBy(() -> ledger.captureHold((String) null, BANK, amount)).hasMessage("holdKey");
+    }
+
+    @Test
     void rejectsNullKeyForReversal() {
-        assertThatThrownBy(() -> ledger.reverse(null))
+        assertThatThrownBy(() -> ledger.reverse((IdempotencyKey) null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("key");
     }
@@ -897,7 +945,7 @@ abstract class LedgerContractTest {
     void rejectsNullHoldKeyForCapture() {
         Money amount = lira("100.00");
 
-        assertThatThrownBy(() -> ledger.captureHold(null, BANK, amount))
+        assertThatThrownBy(() -> ledger.captureHold((IdempotencyKey) null, BANK, amount))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("holdKey");
     }

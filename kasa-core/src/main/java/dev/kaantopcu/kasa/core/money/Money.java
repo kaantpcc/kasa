@@ -22,6 +22,11 @@ public record Money(BigDecimal amount, Currency currency) {
         return new Money(new BigDecimal(amount), currency);
     }
 
+    public static Money of(String amount, String currencyCode) {
+        Objects.requireNonNull(currencyCode, "currencyCode");
+        return of(amount, Currency.getInstance(currencyCode));
+    }
+
     private static BigDecimal withCurrencyScale(BigDecimal amount, Currency currency) {
         try {
             return amount.setScale(currency.getDefaultFractionDigits(), RoundingMode.UNNECESSARY);

@@ -44,10 +44,21 @@ class StatementTest {
                 .hasMessage("Closing balance 0.00 TRY does not match the statement lines");
     }
 
+    @Test
+    void readsKeyTimeValueDateAndDescriptionOfItsTransaction() {
+        StatementLine line = saleLine();
+
+        assertThat(line.idempotencyKey()).isEqualTo(new IdempotencyKey("order-1"));
+        assertThat(line.recordedAt()).isEqualTo(Instant.parse("2026-11-16T09:00:00Z"));
+        assertThat(line.valueDate()).isEqualTo(LocalDate.of(2026, 11, 16));
+        assertThat(line.description()).contains("Order 1 payment");
+    }
+
     private static StatementLine saleLine() {
         Transaction sale = Transaction.builder("order-1")
                 .debit(CUSTOMER_PAYMENTS, lira("900.00"))
                 .credit(SELLER_WALLET, lira("900.00"))
+                .description("Order 1 payment")
                 .build();
         PostedTransaction posted = new PostedTransaction(sale, Instant.parse("2026-11-16T09:00:00Z"), LocalDate.of(2026, 11, 16),
                 Hash.GENESIS, Hash.GENESIS);

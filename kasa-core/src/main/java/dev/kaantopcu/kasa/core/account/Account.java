@@ -16,6 +16,14 @@ public record Account(AccountId id, Currency currency, Side normalBalance, Balan
         requireLimitInAccountCurrency(currency, balancePolicy);
     }
 
+    public static Account debitNormal(String id, Currency currency, BalancePolicy balancePolicy) {
+        return new Account(new AccountId(id), currency, Side.DEBIT, balancePolicy);
+    }
+
+    public static Account creditNormal(String id, Currency currency, BalancePolicy balancePolicy) {
+        return new Account(new AccountId(id), currency, Side.CREDIT, balancePolicy);
+    }
+
     private static void requireLimitInAccountCurrency(Currency currency, BalancePolicy balancePolicy) {
         if (balancePolicy instanceof BalancePolicy.Overdraft(Money limit) && !limit.currency().equals(currency)) {
             throw new CurrencyMismatchException(currency, limit.currency());

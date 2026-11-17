@@ -31,6 +31,24 @@ class MoneyTest {
     }
 
     @Test
+    void createsMoneyFromAmountAndCurrencyCode() {
+        assertThat(Money.of("150.75", "TRY")).isEqualTo(Money.of("150.75", TRY));
+    }
+
+    @Test
+    void rejectsUnknownCurrencyCode() {
+        assertThatThrownBy(() -> Money.of("10.00", "ABC"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsNullCurrencyCode() {
+        assertThatThrownBy(() -> Money.of("10.00", (String) null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("currencyCode");
+    }
+
+    @Test
     void rejectsNullAmount() {
         assertThatThrownBy(() -> new Money(null, TRY))
                 .isInstanceOf(NullPointerException.class)
@@ -39,7 +57,7 @@ class MoneyTest {
 
     @Test
     void rejectsNullCurrency() {
-        assertThatThrownBy(() -> Money.of("10.00", null))
+        assertThatThrownBy(() -> Money.of("10.00", (Currency) null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("currency");
     }
