@@ -28,6 +28,11 @@ final class Marketplace {
     static final HoldableAccount FIRST_SELLER = new HoldableAccount(FIRST_WALLET, FIRST_HELD);
     static final HoldableAccount SECOND_SELLER = new HoldableAccount(SECOND_WALLET, SECOND_HELD);
 
+    static final AccountId SELLERS = new AccountId("seller");
+
+    static final List<Account> ALL = List.of(
+            BANK, FEES, FIRST_WALLET, FIRST_HELD, SECOND_WALLET, SECOND_HELD, USD_BANK, USD_WALLET);
+    static final List<Account> SELLER_ACCOUNTS = List.of(FIRST_WALLET, FIRST_HELD, SECOND_WALLET, SECOND_HELD);
     static final List<Account> WALLETS = List.of(FIRST_WALLET, SECOND_WALLET, USD_WALLET);
     static final List<Account> LIRA_WALLETS = List.of(FIRST_WALLET, SECOND_WALLET);
     static final List<HoldableAccount> HOLDABLE_SELLERS = List.of(FIRST_SELLER, SECOND_SELLER);
