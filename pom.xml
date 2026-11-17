@@ -15,7 +15,7 @@
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jacoco.version>0.8.15</jacoco.version>
+        <jacoco.version>0.8.16</jacoco.version>
         <jacoco.minimum.line>0.95</jacoco.minimum.line>
         <jacoco.minimum.branch>0.95</jacoco.minimum.branch>
         <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
