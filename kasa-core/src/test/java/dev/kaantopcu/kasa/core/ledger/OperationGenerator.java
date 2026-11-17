@@ -172,7 +172,7 @@ final class OperationGenerator {
 
     private LedgerOperation advanceClock(String key) {
         Duration step = Duration.ofMinutes(random.nextInt(MAX_CLOCK_STEP_MINUTES + 1));
-        return new LedgerOperation("%s advance clock by %s".formatted(key, step), _ -> clock.advance(step));
+        return new LedgerOperation("%s advance clock by %s".formatted(key, step), ledger -> clock.advance(step));
     }
 
     private LedgerOperation post(String label, Transaction transaction) {

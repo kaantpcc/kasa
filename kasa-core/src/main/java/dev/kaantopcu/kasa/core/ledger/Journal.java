@@ -25,7 +25,7 @@ final class Journal {
         postedByKey.put(transaction.idempotencyKey(), posted);
         postedInOrder.add(posted);
         transaction.refundOf().ifPresent(originalKey ->
-                refundsByOriginal.computeIfAbsent(originalKey, _ -> new ArrayList<>()).add(posted));
+                refundsByOriginal.computeIfAbsent(originalKey, key -> new ArrayList<>()).add(posted));
         for (Entry entry : transaction.entries()) {
             historiesByAccount.computeIfAbsent(entry.account(), AccountHistory::new).record(posted, entry);
         }

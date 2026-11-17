@@ -14,7 +14,7 @@
     </modules>
 
     <properties>
-        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jacoco.version>0.8.16</jacoco.version>
         <jacoco.minimum.line>0.95</jacoco.minimum.line>
