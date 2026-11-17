@@ -84,6 +84,16 @@ abstract class LedgerConcurrencyContractTest {
         assertThat(finished).isTrue();
     }
 
+    @Test
+    void servesWritesAfterRead() throws InterruptedException {
+        ledger.balance(SELLER_WALLET);
+
+        Thread anotherRequest = Thread.ofVirtual().start(() -> ledger.post(sale("order-1")));
+        boolean finished = anotherRequest.join(Duration.ofSeconds(5));
+
+        assertThat(finished).isTrue();
+    }
+
     private static Transaction sale(String orderKey) {
         return Transaction.builder(orderKey)
                 .debit(CUSTOMER_PAYMENTS, lira("1.00"))

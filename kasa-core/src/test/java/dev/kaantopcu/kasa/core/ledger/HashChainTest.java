@@ -6,20 +6,26 @@ import dev.kaantopcu.kasa.core.account.BalancePolicy;
 import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HashChainTest {
 
     private static final Currency TRY = Currency.getInstance("TRY");
+    private static final Currency USD = Currency.getInstance("USD");
     private static final Account CUSTOMER_PAYMENTS = account("customer-payments", Side.DEBIT);
     private static final Account SELLER_WALLET = account("seller:42:wallet", Side.CREDIT);
+    private static final Account OTHER_SELLER_WALLET = account("seller:43:wallet", Side.CREDIT);
     private static final Instant RECORDED_AT = Instant.parse("2026-11-16T09:00:00Z");
     private static final LocalDate VALUE_DATE = LocalDate.of(2026, 11, 16);
 
@@ -51,6 +57,33 @@ class HashChainTest {
         Hash otherPrevious = HashChain.hashOf(Hash.GENESIS, "3:abc");
 
         assertThat(HashChain.hashOf(otherPrevious, content)).isNotEqualTo(HashChain.hashOf(Hash.GENESIS, content));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("contentWithOneChangedField")
+    void changesCanonicalContentWhenAnyHashedFieldChanges(String changedField, String changedContent) {
+        String original = canonicalOf(sale("order-1", "900.00"));
+
+        assertThat(changedContent).isNotEqualTo(original);
+    }
+
+    static Stream<Arguments> contentWithOneChangedField() {
+        Transaction sale = sale("order-1", "900.00");
+        return Stream.of(
+                Arguments.of("idempotency key", canonicalOf(sale("order-2", "900.00"))),
+                Arguments.of("recorded at", HashChain.canonicalOf(sale, RECORDED_AT.plusSeconds(1), VALUE_DATE)),
+                Arguments.of("value date", HashChain.canonicalOf(sale, RECORDED_AT, VALUE_DATE.plusDays(1))),
+                Arguments.of("description", canonicalOf(saleBuilder().description("Order 1").build())),
+                Arguments.of("refund link", canonicalOf(saleBuilder().refundOf("order-0").build())),
+                Arguments.of("account", canonicalOf(Transaction.builder("order-1")
+                        .debit(CUSTOMER_PAYMENTS, lira("900.00"))
+                        .credit(OTHER_SELLER_WALLET, lira("900.00"))
+                        .build())),
+                Arguments.of("currency", canonicalOf(dollarSale())),
+                Arguments.of("side", canonicalOf(Transaction.builder("order-1")
+                        .credit(CUSTOMER_PAYMENTS, lira("900.00"))
+                        .debit(SELLER_WALLET, lira("900.00"))
+                        .build())));
     }
 
     @Test
@@ -125,6 +158,24 @@ class HashChainTest {
                 .debit(CUSTOMER_PAYMENTS, lira(amount))
                 .credit(SELLER_WALLET, lira(amount))
                 .build();
+    }
+
+    private static Transaction.Builder saleBuilder() {
+        return Transaction.builder("order-1")
+                .debit(CUSTOMER_PAYMENTS, lira("900.00"))
+                .credit(SELLER_WALLET, lira("900.00"));
+    }
+
+    private static Transaction dollarSale() {
+        Money dollars = Money.of("900.00", USD);
+        return Transaction.builder("order-1")
+                .debit(new Account(CUSTOMER_PAYMENTS.id(), USD, Side.DEBIT, BalancePolicy.unlimited()), dollars)
+                .credit(new Account(SELLER_WALLET.id(), USD, Side.CREDIT, BalancePolicy.unlimited()), dollars)
+                .build();
+    }
+
+    private static String canonicalOf(Transaction transaction) {
+        return HashChain.canonicalOf(transaction, RECORDED_AT, VALUE_DATE);
     }
 
     private static Transaction linkedRefund(String description, String originalKey) {

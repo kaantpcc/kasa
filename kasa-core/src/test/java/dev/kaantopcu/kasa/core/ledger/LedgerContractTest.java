@@ -494,6 +494,36 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void rejectsReadingEntriesOfAccountThatIsNotOpen() {
+        Account misspelledWallet = account("seler:42:wallet", Side.CREDIT, nonNegative());
+
+        assertThatThrownBy(() -> ledger.entries(misspelledWallet))
+                .isInstanceOf(AccountNotOpenException.class)
+                .hasMessage("Account seler:42:wallet has not been opened");
+    }
+
+    @Test
+    void rejectsListingActiveHoldsOfAccountThatIsNotOpen() {
+        HoldableAccount unknownSeller = new HoldableAccount(
+                account("seller:99:wallet", Side.CREDIT, nonNegative()),
+                account("seller:99:wallet:held", Side.CREDIT, nonNegative()));
+
+        assertThatThrownBy(() -> ledger.activeHolds(unknownSeller))
+                .isInstanceOf(AccountNotOpenException.class)
+                .hasMessage("Account seller:99:wallet has not been opened");
+    }
+
+    @Test
+    void reversesPayoutBackIntoWallet() {
+        ledger.post(sale("order-1"));
+        ledger.post(payout("payout-1", SELLER_WALLET, "300.00"));
+
+        ledger.reverse(new IdempotencyKey("payout-1"));
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(lira("900.00"));
+    }
+
+    @Test
     void acceptsKeyOfRejectedTransactionForNextAttempt() {
         Transaction toMisspelledWallet = saleToMisspelledWallet();
         assertThatThrownBy(() -> ledger.post(toMisspelledWallet))
