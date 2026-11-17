@@ -11,14 +11,24 @@ import java.util.Map;
 import java.util.Optional;
 
 // Not thread-safe on its own: InMemoryLedger calls it only while holding its read or write lock.
+// The per-account histories and the refund index are derived from the posted transactions (ADR-0019);
+// the transactions stay the only source of truth (ADR-0001).
 final class Journal {
 
     private final Map<IdempotencyKey, PostedTransaction> postedByKey = new HashMap<>();
     private final List<PostedTransaction> postedInOrder = new ArrayList<>();
+    private final Map<Account, AccountHistory> historiesByAccount = new HashMap<>();
+    private final Map<IdempotencyKey, List<PostedTransaction>> refundsByOriginal = new HashMap<>();
 
     void append(PostedTransaction posted) {
-        postedByKey.put(posted.transaction().idempotencyKey(), posted);
+        Transaction transaction = posted.transaction();
+        postedByKey.put(transaction.idempotencyKey(), posted);
         postedInOrder.add(posted);
+        transaction.refundOf().ifPresent(originalKey ->
+                refundsByOriginal.computeIfAbsent(originalKey, _ -> new ArrayList<>()).add(posted));
+        for (Entry entry : transaction.entries()) {
+            historiesByAccount.computeIfAbsent(entry.account(), AccountHistory::new).record(posted, entry);
+        }
     }
 
     Optional<PostedTransaction> postedWith(IdempotencyKey key) {
@@ -26,13 +36,7 @@ final class Journal {
     }
 
     List<PostedTransaction> refundsOf(IdempotencyKey originalKey) {
-        List<PostedTransaction> refunds = new ArrayList<>();
-        for (PostedTransaction posted : postedInOrder) {
-            if (posted.transaction().isRefundOf(originalKey)) {
-                refunds.add(posted);
-            }
-        }
-        return List.copyOf(refunds);
+        return List.copyOf(refundsByOriginal.getOrDefault(originalKey, List.of()));
     }
 
     Optional<Instant> latestRecordedAt() {
@@ -54,50 +58,30 @@ final class Journal {
     }
 
     Money balanceOf(Account account) {
-        return sumOf(account, entriesOf(account));
+        return historyOf(account).balance();
     }
 
     Money balanceBefore(Account account, Instant before) {
-        return sumOf(account, entriesBefore(account, before));
+        return historyOf(account).balanceBefore(before);
     }
 
     List<Entry> entriesOf(Account account) {
-        List<Entry> accountEntries = new ArrayList<>();
-        for (PostedTransaction posted : postedInOrder) {
-            accountEntries.addAll(posted.transaction().entriesFor(account));
-        }
-        return List.copyOf(accountEntries);
+        return historyOf(account).entries();
     }
 
     List<Entry> entriesBefore(Account account, Instant before) {
-        List<Entry> accountEntries = new ArrayList<>();
-        for (PostedTransaction posted : postedInOrder) {
-            if (!posted.recordedAt().isBefore(before)) {
-                break;
-            }
-            accountEntries.addAll(posted.transaction().entriesFor(account));
-        }
-        return List.copyOf(accountEntries);
+        return historyOf(account).entriesBefore(before);
     }
 
-    List<PostedTransaction> postedBetween(Instant from, Instant to) {
-        List<PostedTransaction> between = new ArrayList<>();
-        for (PostedTransaction posted : postedInOrder) {
-            if (!posted.recordedAt().isBefore(to)) {
-                break;
-            }
-            if (!posted.recordedAt().isBefore(from)) {
-                between.add(posted);
-            }
-        }
-        return List.copyOf(between);
+    List<StatementLine> statementLines(Account account, Instant from, Instant to) {
+        return historyOf(account).linesBetween(from, to);
     }
 
-    private static Money sumOf(Account account, List<Entry> entries) {
-        Money balance = Money.zero(account.currency());
-        for (Entry entry : entries) {
-            balance = balance.add(entry.balanceChange());
+    private AccountHistory historyOf(Account account) {
+        AccountHistory history = historiesByAccount.get(account);
+        if (history == null) {
+            return new AccountHistory(account);
         }
-        return balance;
+        return history;
     }
 }
