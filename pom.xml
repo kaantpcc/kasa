@@ -10,6 +10,7 @@
     <packaging>pom</packaging>
     <modules>
         <module>kasa-core</module>
+        <module>kasa-benchmarks</module>
     </modules>
 
     <properties>
@@ -23,6 +24,10 @@
         <pitest.version>1.30.2</pitest.version>
         <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
         <pitest.mutation.threshold>95</pitest.mutation.threshold>
+        <pitest.skip>false</pitest.skip>
+        <jmh.version>1.37</jmh.version>
+        <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+        <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
     </properties>
 
     <dependencies>
@@ -136,6 +141,7 @@
                             </outputFormats>
                             <timestampedReports>false</timestampedReports>
                             <mutationThreshold>${pitest.mutation.threshold}</mutationThreshold>
+                            <skip>${pitest.skip}</skip>
                         </configuration>
                         <executions>
                             <execution>

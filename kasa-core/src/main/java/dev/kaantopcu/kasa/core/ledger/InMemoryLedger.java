@@ -282,15 +282,9 @@ public final class InMemoryLedger implements Ledger {
         accounts.requireOpened(account);
         requireOrderedPeriod(from, to);
         Money openingBalance = journal.balanceBefore(account, from);
-        Money runningBalance = openingBalance;
-        List<StatementLine> lines = new ArrayList<>();
-        for (PostedTransaction posted : journal.postedBetween(from, to)) {
-            for (Entry entry : posted.transaction().entriesFor(account)) {
-                runningBalance = runningBalance.add(entry.balanceChange());
-                lines.add(new StatementLine(posted, entry, runningBalance));
-            }
-        }
-        return new Statement(openingBalance, lines, runningBalance);
+        List<StatementLine> lines = journal.statementLines(account, from, to);
+        Money closingBalance = lines.isEmpty() ? openingBalance : lines.getLast().balanceAfter();
+        return new Statement(openingBalance, lines, closingBalance);
     }
 
     private static void requireOrderedPeriod(Instant from, Instant to) {
