@@ -20,7 +20,7 @@
         <jacoco.minimum.branch>0.95</jacoco.minimum.branch>
         <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
         <junit.version>6.1.3</junit.version>
-        <pitest.version>1.30.1</pitest.version>
+        <pitest.version>1.30.2</pitest.version>
         <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
         <pitest.mutation.threshold>95</pitest.mutation.threshold>
     </properties>
