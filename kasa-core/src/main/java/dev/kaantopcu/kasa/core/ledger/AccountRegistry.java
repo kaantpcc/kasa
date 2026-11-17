@@ -3,19 +3,23 @@ package dev.kaantopcu.kasa.core.ledger;
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.AccountId;
 import dev.kaantopcu.kasa.core.account.AccountStatus;
+import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.Money;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // Not thread-safe on its own: InMemoryLedger calls it only while holding its read or write lock.
 final class AccountRegistry {
 
     private final Map<AccountId, Account> accountsById = new LinkedHashMap<>();
     private final Map<AccountId, AccountStatus> statusesById = new HashMap<>();
+    private final Set<AccountId> heldAccountIds = new HashSet<>();
 
     void open(Account account) {
         requireOpenable(account);
@@ -25,9 +29,21 @@ final class AccountRegistry {
         }
     }
 
-    void openAll(List<Account> accountsToOpen) {
+    void openHoldable(HoldableAccount account) {
+        List<Account> accountsToOpen = List.of(account.available(), account.held());
         accountsToOpen.forEach(this::requireOpenable);
         accountsToOpen.forEach(this::open);
+        markHeld(account.held());
+    }
+
+    void markHeld(Account held) {
+        heldAccountIds.add(held.id());
+    }
+
+    void requireNotHeld(Account account) {
+        if (heldAccountIds.contains(account.id())) {
+            throw new HeldAccountPostingException(account.id());
+        }
     }
 
     private void requireOpenable(Account account) {

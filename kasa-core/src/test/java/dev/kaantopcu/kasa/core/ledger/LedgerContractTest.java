@@ -688,6 +688,74 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void rejectsReversingHoldPlacement() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+
+        assertThatThrownBy(() -> ledger.reverse(HOLD_KEY))
+                .isInstanceOf(HeldAccountPostingException.class)
+                .hasMessage("Held account seller:42:wallet:held changes only through placeHold, captureHold and releaseHold");
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+        assertThat(ledger.activeHolds(SELLER)).hasSize(1);
+    }
+
+    @Test
+    void rejectsReversingHoldCapture() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("200.00"));
+        IdempotencyKey captureKey = new IdempotencyKey("payout-1-hold:capture");
+
+        assertThatThrownBy(() -> ledger.reverse(captureKey))
+                .isInstanceOf(HeldAccountPostingException.class);
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void rejectsPostingToHeldAccount() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        Transaction drainHeld = Transaction.builder("drain-1")
+                .debit(SELLER.held(), lira("300.00"))
+                .credit(SELLER.available(), lira("300.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(drainHeld))
+                .isInstanceOf(HeldAccountPostingException.class);
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void rejectsCapturingIntoHeldAccount() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        Money fullAmount = lira("300.00");
+
+        assertThatThrownBy(() -> ledger.captureHold(HOLD_KEY, SELLER.held(), fullAmount))
+                .isInstanceOf(HeldAccountPostingException.class);
+
+        assertThat(ledger.activeHolds(SELLER)).hasSize(1);
+    }
+
+    @Test
+    void rejectsPostingToHeldAccountOpenedWithOpenHoldable() {
+        HoldableAccount newSeller = new HoldableAccount(
+                account("seller:43:wallet", Side.CREDIT, nonNegative()),
+                account("seller:43:wallet:held", Side.CREDIT, nonNegative()));
+        ledger.openHoldable(newSeller);
+        Transaction saleIntoHeld = Transaction.builder("order-43")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(newSeller.held(), lira("100.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(saleIntoHeld))
+                .isInstanceOf(HeldAccountPostingException.class);
+    }
+
+    @Test
     void captureHoldMovesCapturedAmountAndReturnsRemainder() {
         fundSeller("600.00");
         ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));

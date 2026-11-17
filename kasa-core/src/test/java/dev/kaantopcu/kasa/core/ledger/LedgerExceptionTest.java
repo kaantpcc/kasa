@@ -35,6 +35,7 @@ class LedgerExceptionTest {
             case TransactionNotFoundException _ -> "transaction-not-found";
             case RefundExceedsOriginalException _ -> "refund-exceeds-original";
             case HoldAlreadySettledException _ -> "hold-already-settled";
+            case HeldAccountPostingException _ -> "held-account-posting";
         };
     }
 }

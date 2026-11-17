@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.ledger;
 
 import dev.kaantopcu.kasa.core.account.Account;
 import dev.kaantopcu.kasa.core.account.BalancePolicy;
+import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.Money;
 
 import java.time.Instant;
@@ -30,6 +31,7 @@ final class LedgerInvariants {
         checkBalancePolicies();
         checkQueriesAgree(afterLastRecord);
         checkRefundsStayWithinOriginals(afterLastRecord);
+        checkHeldBalancesMatchActiveHolds();
     }
 
     private void checkTrialBalance(Instant afterLastRecord) {
@@ -84,6 +86,18 @@ final class LedgerInvariants {
                         .as("refunds of %s on %s stay within the original", originalKey.value(), idOf(account))
                         .isTrue();
             });
+        }
+    }
+
+    private void checkHeldBalancesMatchActiveHolds() {
+        for (HoldableAccount seller : Marketplace.HOLDABLE_SELLERS) {
+            Money activeTotal = Money.zero(seller.held().currency());
+            for (Hold hold : ledger.activeHolds(seller)) {
+                activeTotal = activeTotal.add(hold.amount());
+            }
+            assertThat(ledger.balance(seller.held()))
+                    .as("%s balance equals the total of its active holds", idOf(seller.held()))
+                    .isEqualTo(activeTotal);
         }
     }
 
