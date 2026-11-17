@@ -43,7 +43,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void openHoldable(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
-        write(() -> accounts.openAll(List.of(account.available(), account.held())));
+        write(() -> accounts.openHoldable(account));
     }
 
     @Override
@@ -67,7 +67,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
-        write(() -> record(transaction));
+        write(() -> recordOutsideHolds(transaction));
     }
 
     @Override
@@ -81,7 +81,7 @@ public final class InMemoryLedger implements Ledger {
         Objects.requireNonNull(holdKey, "holdKey");
         Objects.requireNonNull(destination, "destination");
         Objects.requireNonNull(amount, "amount");
-        write(() -> settleHold(holdKey, hold -> hold.capture(destination, amount)));
+        write(() -> recordCapture(holdKey, destination, amount));
     }
 
     @Override
@@ -178,15 +178,28 @@ public final class InMemoryLedger implements Ledger {
         journal.append(stamp(transaction));
     }
 
+    private void recordOutsideHolds(Transaction transaction) {
+        for (Entry entry : transaction.entries()) {
+            accounts.requireNotHeld(entry.account());
+        }
+        record(transaction);
+    }
+
     private void recordReversal(IdempotencyKey key) {
         PostedTransaction original = journal.postedWith(key)
                 .orElseThrow(() -> new TransactionNotFoundException(key));
-        record(original.transaction().reversedOn(original.valueDate()));
+        recordOutsideHolds(original.transaction().reversedOn(original.valueDate()));
     }
 
     private void recordHold(Hold hold) {
         record(hold.place());
         holds.remember(hold);
+        accounts.markHeld(hold.account().held());
+    }
+
+    private void recordCapture(IdempotencyKey holdKey, Account destination, Money amount) {
+        accounts.requireNotHeld(destination);
+        settleHold(holdKey, hold -> hold.capture(destination, amount));
     }
 
     private void settleHold(IdempotencyKey holdKey, Function<Hold, Transaction> settlement) {
