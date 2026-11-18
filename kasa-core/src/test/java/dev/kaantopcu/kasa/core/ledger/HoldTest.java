@@ -59,10 +59,9 @@ class HoldTest {
     @Test
     void captureMovesHeldAmountOutToDestination() {
         fundSeller("600.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.post(hold.place());
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
 
-        ledger.post(hold.capture(BANK, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("300.00"));
 
         assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("300.00"));
         assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
@@ -71,10 +70,9 @@ class HoldTest {
     @Test
     void releaseReturnsHeldAmountToAvailableAccount() {
         fundSeller("600.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.post(hold.place());
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
 
-        ledger.post(hold.release());
+        ledger.releaseHold(HOLD_KEY);
 
         assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("600.00"));
         assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
@@ -108,10 +106,9 @@ class HoldTest {
     @Test
     void partialCaptureReturnsRemainderToAvailableAccount() {
         fundSeller("600.00");
-        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
-        ledger.post(hold.place());
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
 
-        ledger.post(hold.capture(BANK, lira("200.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("200.00"));
 
         assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("400.00"));
         assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));

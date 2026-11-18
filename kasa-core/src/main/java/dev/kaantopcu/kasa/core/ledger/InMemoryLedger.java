@@ -91,12 +91,14 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void post(Transaction transaction) {
         Objects.requireNonNull(transaction, "transaction");
+        transaction.idempotencyKey().requireNotReserved();
         write(() -> recordOutsideHolds(transaction));
     }
 
     @Override
     public void placeHold(Hold hold) {
         Objects.requireNonNull(hold, "hold");
+        hold.key().requireNotReserved();
         write(() -> recordHold(hold));
     }
 

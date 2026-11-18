@@ -12,8 +12,8 @@ tamper-evident hash chain.
 [![Java 21+](https://img.shields.io/badge/Java-21%2B-blue)](#installation)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-> **Status:** `0.1.0` is the first release. The ledger runs in memory; a PostgreSQL-backed ledger is planned
-> for `0.2`. The API may still change before `1.0`.
+> **Status:** `0.1.0` is the first release. The ledger runs in memory; PostgreSQL storage is planned for
+> `0.2`. The API may still change before `1.0`.
 
 ## Contents
 
@@ -173,6 +173,11 @@ ledger.post(sale);                 // a retry with the same key and content has 
 Posting a *different* transaction with a key that was already used throws `IdempotencyKeyConflictException`.
 A transaction can also carry a value date (`.valueDate(LocalDate)`); without one, the ledger uses the recording
 date.
+
+The ledger names the transactions it creates by adding `:reversal`, `:capture` or `:release` to your key, so
+keys that **end** with one of these suffixes are reserved: `post` and `placeHold` reject them with an
+`IllegalArgumentException`. You can still read those transactions, for example with
+`ledger.posted("order-1:reversal")`.
 
 ## Guide
 
@@ -388,7 +393,7 @@ The `kasa-benchmarks` module is not published.
 
 Kasa `0.1` is honest about what it does not do yet:
 
-- **In memory only.** Everything is lost when the process stops. A PostgreSQL ledger is planned for `0.2`.
+- **In memory only.** Everything is lost when the process stops. PostgreSQL storage is planned for `0.2`.
 - **One capture per hold.** A hold is captured once (fully or partly, with the rest returned); multiple partial
   captures are not supported.
 - **Holdable accounts are closed account by account.** If the available account is closed while a hold is
@@ -403,8 +408,10 @@ Kasa `0.1` is honest about what it does not do yet:
 
 ## Roadmap
 
-- **0.2:** `JdbcLedger` backed by PostgreSQL, passing the same contract tests as `InMemoryLedger`.
-- **Later:** payouts to banks with compensation (sagas), end-of-day reconciliation, and a REST service.
+- **0.2:** PostgreSQL storage that passes the same contract tests as `InMemoryLedger`, and a Spring Boot REST
+  service that runs with `docker compose up`.
+- **Later:** payouts to banks with compensation (sagas), event publishing with an outbox, and end-of-day
+  reconciliation.
 
 Kasa is not a bank and does not hold real money, accept card payments or produce invoices and tax records. It
 keeps the books for the money your application moves.

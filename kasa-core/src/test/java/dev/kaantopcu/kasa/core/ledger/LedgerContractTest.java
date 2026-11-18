@@ -9,6 +9,8 @@ import dev.kaantopcu.kasa.core.account.Side;
 import dev.kaantopcu.kasa.core.money.Money;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Currency;
 
@@ -789,6 +791,65 @@ abstract class LedgerContractTest {
                 .isInstanceOf(HeldAccountPostingException.class);
 
         assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {":reversal", ":capture", ":release"})
+    void rejectsTransactionWithReservedKeySuffix(String suffix) {
+        Transaction transaction = sale("order-1" + suffix);
+
+        assertThatThrownBy(() -> ledger.post(transaction))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Idempotency key order-1%s ends with %s, which is reserved for transactions the ledger creates"
+                        .formatted(suffix, suffix));
+
+        assertThat(ledger.posted("order-1" + suffix)).isEmpty();
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void rejectsHoldWithReservedKeySuffix() {
+        fundSeller("600.00");
+        Hold hold = new Hold(new IdempotencyKey("payout-1-hold:release"), SELLER, lira("300.00"));
+
+        assertThatThrownBy(() -> ledger.placeHold(hold))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Idempotency key payout-1-hold:release ends with :release, which is reserved for transactions the ledger creates");
+
+        assertThat(ledger.activeHolds(SELLER)).isEmpty();
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("600.00"));
+    }
+
+    @Test
+    void releasesHoldAfterRejectingTransactionWithItsCaptureKey() {
+        fundSeller("600.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        Transaction lookalike = Transaction.builder("payout-1-hold:capture")
+                .debit(BANK, lira("1.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("1.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(lookalike))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(ledger.activeHolds(SELLER)).hasSize(1);
+
+        ledger.releaseHold(HOLD_KEY);
+
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("600.00"));
+    }
+
+    @Test
+    void reversesTransactionAfterRejectingTransactionWithItsReversalKey() {
+        Transaction lookalike = sale("order-1:reversal");
+        assertThatThrownBy(() -> ledger.post(lookalike))
+                .isInstanceOf(IllegalArgumentException.class);
+        ledger.post(sale("order-1"));
+
+        ledger.reverse("order-1");
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.posted("order-1:reversal")).isPresent();
     }
 
     @Test
