@@ -6,8 +6,13 @@ on:
   pull_request:
 
 jobs:
-  build:
+  test:
+    name: test (Java ${{ matrix.java }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['21', '25']
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
@@ -16,20 +21,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Java 25
+      - name: Set up Java ${{ matrix.java }}
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: ${{ matrix.java }}
           cache: maven
 
       - name: Build and test
         run: mvn -B verify
 
       - name: Analyze with SonarQube Cloud
-        if: env.SONAR_TOKEN != ''
+        if: env.SONAR_TOKEN != '' && matrix.java == '25'
         run: >
           mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
           -Dsonar.organization=kaantpcc
           -Dsonar.projectKey=kaantpcc_kasa
           -Dsonar.qualitygate.wait=true
+
+  build:
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that every Java version passed
+        run: test "${{ needs.test.result }}" = "success"

@@ -25,17 +25,17 @@ class LedgerExceptionTest {
 
     private static String errorCode(LedgerException rejection) {
         return switch (rejection) {
-            case AccountNotOpenException _ -> "account-not-open";
-            case AccountDefinitionConflictException _ -> "account-definition-conflict";
-            case AccountFrozenException _ -> "account-frozen";
-            case AccountClosedException _ -> "account-closed";
-            case NonZeroBalanceException _ -> "non-zero-balance";
-            case InsufficientFundsException _ -> "insufficient-funds";
-            case IdempotencyKeyConflictException _ -> "idempotency-key-conflict";
-            case TransactionNotFoundException _ -> "transaction-not-found";
-            case RefundExceedsOriginalException _ -> "refund-exceeds-original";
-            case HoldAlreadySettledException _ -> "hold-already-settled";
-            case HeldAccountPostingException _ -> "held-account-posting";
+            case AccountNotOpenException rejected -> "account-not-open";
+            case AccountDefinitionConflictException rejected -> "account-definition-conflict";
+            case AccountFrozenException rejected -> "account-frozen";
+            case AccountClosedException rejected -> "account-closed";
+            case NonZeroBalanceException rejected -> "non-zero-balance";
+            case InsufficientFundsException rejected -> "insufficient-funds";
+            case IdempotencyKeyConflictException rejected -> "idempotency-key-conflict";
+            case TransactionNotFoundException rejected -> "transaction-not-found";
+            case RefundExceedsOriginalException rejected -> "refund-exceeds-original";
+            case HoldAlreadySettledException rejected -> "hold-already-settled";
+            case HeldAccountPostingException rejected -> "held-account-posting";
         };
     }
 }

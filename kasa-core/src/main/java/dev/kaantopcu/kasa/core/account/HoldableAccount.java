@@ -4,8 +4,28 @@ import dev.kaantopcu.kasa.core.money.CurrencyMismatchException;
 
 import java.util.Objects;
 
+/**
+ * An account that can put money on hold, made of an available account and a held account.
+ *
+ * <p>Placing a hold moves money from the available account to the held account, so it can no longer be
+ * spent but still belongs to the owner. The total balance is the sum of both. Open it with
+ * {@link dev.kaantopcu.kasa.core.ledger.AccountAdministration#openHoldable(HoldableAccount)}; after that,
+ * the held account changes only through the ledger's hold operations.
+ *
+ * @param available the account the owner can spend from
+ * @param held      the account that keeps money on hold
+ */
 public record HoldableAccount(Account available, Account held) {
 
+    /**
+     * Creates a holdable account from two account definitions.
+     *
+     * @param available the account the owner can spend from
+     * @param held      the account that keeps money on hold
+     * @throws IllegalArgumentException  if both accounts have the same id, their normal balances differ, or
+     *                                   the held account's policy is not {@link BalancePolicy#nonNegative()}
+     * @throws CurrencyMismatchException if the two accounts are in different currencies
+     */
     public HoldableAccount {
         Objects.requireNonNull(available, "available");
         Objects.requireNonNull(held, "held");

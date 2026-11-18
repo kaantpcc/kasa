@@ -12,7 +12,7 @@ By taking part in this project you agree to follow the [Code of Conduct](CODE_OF
 
 ## Building and testing
 
-You need JDK 25 and Maven 3.9 or newer.
+You need JDK 21 or newer and Maven 3.9 or newer. Kasa itself targets Java 21; CI also runs the build on Java 25.
 
 ```bash
 mvn verify

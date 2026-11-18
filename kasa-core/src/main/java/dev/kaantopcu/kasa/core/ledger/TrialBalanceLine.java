@@ -6,8 +6,23 @@ import dev.kaantopcu.kasa.core.money.Money;
 
 import java.util.Objects;
 
+/**
+ * The debit and credit totals of one account in a {@link TrialBalance}.
+ *
+ * @param account the account
+ * @param debits  the sum of the account's debit entries
+ * @param credits the sum of the account's credit entries
+ */
 public record TrialBalanceLine(Account account, Money debits, Money credits) {
 
+    /**
+     * Creates a trial balance line.
+     *
+     * @param account the account
+     * @param debits  the sum of the account's debit entries, in its currency
+     * @param credits the sum of the account's credit entries, in its currency
+     * @throws CurrencyMismatchException if {@code debits} or {@code credits} is not in the account's currency
+     */
     public TrialBalanceLine {
         Objects.requireNonNull(account, "account");
         Objects.requireNonNull(debits, "debits");
@@ -16,6 +31,11 @@ public record TrialBalanceLine(Account account, Money debits, Money credits) {
         requireAccountCurrency(account, credits);
     }
 
+    /**
+     * Returns the account's balance in its normal direction.
+     *
+     * @return debits minus credits for a debit-normal account, credits minus debits for a credit-normal one
+     */
     public Money balance() {
         return switch (account.normalBalance()) {
             case DEBIT -> debits.subtract(credits);

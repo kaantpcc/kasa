@@ -386,7 +386,7 @@ abstract class LedgerTimeContractTest {
 
     @Test
     void rejectsNullKeyForPosted() {
-        assertThatThrownBy(() -> ledger.posted(null))
+        assertThatThrownBy(() -> ledger.posted((IdempotencyKey) null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("key");
     }

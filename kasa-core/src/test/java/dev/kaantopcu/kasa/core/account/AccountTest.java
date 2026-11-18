@@ -26,6 +26,20 @@ class AccountTest {
     }
 
     @Test
+    void createsDebitNormalAccountFromTextId() {
+        Account bank = Account.debitNormal("bank", TRY, BalancePolicy.unlimited());
+
+        assertThat(bank).isEqualTo(new Account(new AccountId("bank"), TRY, Side.DEBIT, BalancePolicy.unlimited()));
+    }
+
+    @Test
+    void createsCreditNormalAccountFromTextId() {
+        Account wallet = Account.creditNormal("seller:42:wallet", TRY, BalancePolicy.nonNegative());
+
+        assertThat(wallet).isEqualTo(new Account(SELLER_WALLET, TRY, Side.CREDIT, BalancePolicy.nonNegative()));
+    }
+
+    @Test
     void acceptsOverdraftLimitInAccountCurrency() {
         BalancePolicy overdraft = BalancePolicy.overdraft(Money.of("5000.00", TRY));
 
