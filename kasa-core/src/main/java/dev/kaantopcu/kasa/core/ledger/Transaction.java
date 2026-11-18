@@ -41,8 +41,6 @@ public record Transaction(IdempotencyKey idempotencyKey,
                           Optional<String> description,
                           Optional<IdempotencyKey> refundOf) {
 
-    private static final String REVERSAL_SUFFIX = ":reversal";
-
     /**
      * Creates a transaction.
      *
@@ -125,7 +123,7 @@ public record Transaction(IdempotencyKey idempotencyKey,
         for (Entry entry : entries) {
             reversedEntries.add(entry.reversed());
         }
-        return new Transaction(new IdempotencyKey(idempotencyKey.value() + REVERSAL_SUFFIX), reversedEntries,
+        return new Transaction(idempotencyKey.withSuffix(IdempotencyKey.REVERSAL_SUFFIX), reversedEntries,
                 Optional.of(valueDate), Optional.empty(), Optional.of(idempotencyKey));
     }
 

@@ -23,9 +23,6 @@ import java.util.Objects;
  */
 public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
 
-    private static final String CAPTURE_SUFFIX = ":capture";
-    private static final String RELEASE_SUFFIX = ":release";
-
     /**
      * Creates a hold request.
      *
@@ -70,11 +67,11 @@ public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
     }
 
     IdempotencyKey captureKey() {
-        return suffixedKey(CAPTURE_SUFFIX);
+        return key.withSuffix(IdempotencyKey.CAPTURE_SUFFIX);
     }
 
     IdempotencyKey releaseKey() {
-        return suffixedKey(RELEASE_SUFFIX);
+        return key.withSuffix(IdempotencyKey.RELEASE_SUFFIX);
     }
 
     private Entry decrease(Account target) {
@@ -83,10 +80,6 @@ public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
 
     private static Entry increase(Account target, Money value) {
         return new Entry(target, value, target.normalBalance());
-    }
-
-    private IdempotencyKey suffixedKey(String suffix) {
-        return new IdempotencyKey(key.value() + suffix);
     }
 
     private void requireCapturable(Money capturedAmount) {

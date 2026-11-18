@@ -22,6 +22,9 @@ public interface LedgerWriter {
      * the original moved, counting earlier refunds.
      *
      * @param transaction the transaction to record
+     * @throws IllegalArgumentException           if the key ends with {@code ":reversal"}, {@code ":capture"}
+     *                                            or {@code ":release"}, which are reserved for transactions the
+     *                                            ledger creates
      * @throws IdempotencyKeyConflictException    if the key was already used for a different transaction
      * @throws AccountNotOpenException            if an account has not been opened
      * @throws AccountDefinitionConflictException if an account was opened with a different definition
@@ -41,6 +44,9 @@ public interface LedgerWriter {
      * has no effect.
      *
      * @param hold the hold to place
+     * @throws IllegalArgumentException           if the key ends with {@code ":reversal"}, {@code ":capture"}
+     *                                            or {@code ":release"}, which are reserved for transactions the
+     *                                            ledger creates
      * @throws IdempotencyKeyConflictException    if the key was already used for something else
      * @throws AccountNotOpenException            if either account has not been opened
      * @throws AccountDefinitionConflictException if either account was opened with a different definition
