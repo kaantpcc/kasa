@@ -91,6 +91,34 @@ abstract class AccountHierarchyContractTest {
     }
 
     @Test
+    void sumsSingleAccountWhenBranchIsItsOwnId() {
+        pay("order-1", SELLER_43_WALLET, "500.00");
+
+        assertThat(ledger.balanceUnder(new AccountId("seller:43:wallet"))).isEqualTo(lira("500.00"));
+    }
+
+    @Test
+    void includesAccountOpenedAfterEarlierQuery() {
+        pay("order-1", SELLER_43_WALLET, "500.00");
+        ledger.balanceUnder(new AccountId("seller:43"));
+        Account reserve = account("seller:43:refund-reserve", TRY, Side.CREDIT, nonNegative());
+        ledger.open(reserve);
+
+        pay("order-2", reserve, "70.00");
+
+        assertThat(ledger.balanceUnder(new AccountId("seller:43"))).isEqualTo(lira("570.00"));
+    }
+
+    @Test
+    void countsAccountOnceWhenItIsOpenedAgain() {
+        pay("order-1", SELLER_43_WALLET, "500.00");
+
+        ledger.open(SELLER_43_WALLET);
+
+        assertThat(ledger.balanceUnder(new AccountId("seller:43"))).isEqualTo(lira("500.00"));
+    }
+
+    @Test
     void returnsZeroForBranchWithoutEntries() {
         assertThat(ledger.balanceUnder(new AccountId("seller:43"))).isEqualTo(Money.zero(TRY));
     }

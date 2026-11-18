@@ -276,6 +276,54 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void allowsFullRefundAfterEarlierRefundIsReversed() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+        ledger.reverse("refund-1");
+
+        ledger.post(Transaction.builder("refund-2")
+                .refundOf("order-1")
+                .debit(SELLER_WALLET, lira("900.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("900.00"))
+                .build());
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void countsMoneyGivenBackToRefundTowardsOriginal() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+        ledger.post(Transaction.builder("refund-1-correction")
+                .refundOf("refund-1")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(SELLER_WALLET, lira("100.00"))
+                .build());
+        Transaction tooLarge = Transaction.builder("refund-2")
+                .refundOf("order-1")
+                .debit(SELLER_WALLET, lira("701.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("701.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(tooLarge))
+                .isInstanceOf(RefundExceedsOriginalException.class)
+                .hasMessage("Refund exceeds what can be refunded on seller:42:wallet: refundable 700.00 TRY, requested 701.00 TRY");
+    }
+
+    @Test
+    void rejectsReversingReversal() {
+        ledger.post(sale("order-1"));
+        ledger.reverse("order-1");
+
+        assertThatThrownBy(() -> ledger.reverse("order-1:reversal"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Transaction order-1:reversal is a reversal and cannot be reversed; post the original again with a new key");
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.posted("order-1:reversal:reversal")).isEmpty();
+    }
+
+    @Test
     void ignoresEntriesOfAnotherAccounts() {
         ledger.post(sale("order-1"));
 
@@ -976,6 +1024,124 @@ abstract class LedgerContractTest {
     @Test
     void activeHoldsIsEmptyWithoutHolds() {
         assertThat(ledger.activeHolds(SELLER)).isEmpty();
+    }
+
+    @Test
+    void activeHoldsListsHoldPlacedTwiceWithSameKeyOnce() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        ledger.placeHold(hold);
+        ledger.placeHold(hold);
+
+        assertThat(ledger.activeHolds(SELLER)).containsExactly(hold);
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void activeHoldsDoesNotListReleasedHoldPlacedAgain() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.placeHold(hold);
+        ledger.releaseHold(HOLD_KEY);
+
+        ledger.placeHold(hold);
+
+        assertThat(ledger.activeHolds(SELLER)).isEmpty();
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void activeHoldsListsOnlyHoldsOfGivenAccount() {
+        fundSeller("600.00");
+        depositToCreditCustomer("200.00");
+        Hold sellerHold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        Hold customerHold = new Hold(new IdempotencyKey("card-1-hold"), CREDIT_CUSTOMER_CARD, lira("50.00"));
+
+        ledger.placeHold(sellerHold);
+        ledger.placeHold(customerHold);
+
+        assertThat(ledger.activeHolds(SELLER)).containsExactly(sellerHold);
+        assertThat(ledger.activeHolds(CREDIT_CUSTOMER_CARD)).containsExactly(customerHold);
+    }
+
+    @Test
+    void rejectsClosingAvailableAccountWhileHoldIsActive() {
+        fundSeller("300.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        Account available = SELLER.available();
+
+        assertThatThrownBy(() -> ledger.close(available))
+                .isInstanceOf(ActiveHoldsException.class)
+                .hasMessage("Cannot close account seller:42:wallet while it has active holds");
+
+        assertThat(ledger.status(available)).isEqualTo(AccountStatus.OPEN);
+        ledger.releaseHold(HOLD_KEY);
+        assertThat(ledger.balance(available)).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void closesAvailableAccountAfterItsHoldIsCaptured() {
+        fundSeller("300.00");
+        ledger.placeHold(new Hold(HOLD_KEY, SELLER, lira("300.00")));
+        ledger.captureHold(HOLD_KEY, BANK, lira("300.00"));
+
+        ledger.close(SELLER.available());
+
+        assertThat(ledger.status(SELLER.available())).isEqualTo(AccountStatus.CLOSED);
+    }
+
+    @Test
+    void rejectsHoldWhenHeldAccountAlreadyHasMoney() {
+        fundSeller("600.00");
+        ledger.post(Transaction.builder("misplaced-1")
+                .debit(CUSTOMER_PAYMENTS, lira("20.00"))
+                .credit(SELLER.held(), lira("20.00"))
+                .build());
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        assertThatThrownBy(() -> ledger.placeHold(hold))
+                .isInstanceOf(HeldAccountNotEmptyException.class)
+                .hasMessage("Held account seller:42:wallet:held must start with a zero balance, got 20.00 TRY");
+
+        assertThat(ledger.activeHolds(SELLER)).isEmpty();
+        assertThat(ledger.balance(SELLER.available())).isEqualTo(lira("600.00"));
+    }
+
+    @Test
+    void rejectsOpeningHoldableAccountWhoseHeldAccountHasMoney() {
+        HoldableAccount newSeller = new HoldableAccount(
+                account("seller:43:wallet", Side.CREDIT, nonNegative()),
+                account("seller:43:wallet:held", Side.CREDIT, nonNegative()));
+        ledger.open(newSeller.held());
+        ledger.post(Transaction.builder("misplaced-1")
+                .debit(CUSTOMER_PAYMENTS, lira("20.00"))
+                .credit(newSeller.held(), lira("20.00"))
+                .build());
+
+        assertThatThrownBy(() -> ledger.openHoldable(newSeller))
+                .isInstanceOf(HeldAccountNotEmptyException.class);
+
+        assertThatThrownBy(() -> ledger.status(newSeller.available()))
+                .isInstanceOf(AccountNotOpenException.class);
+    }
+
+    @Test
+    void opensHoldableAccountAgainWhileItsHoldIsActive() {
+        HoldableAccount newSeller = new HoldableAccount(
+                account("seller:43:wallet", Side.CREDIT, nonNegative()),
+                account("seller:43:wallet:held", Side.CREDIT, nonNegative()));
+        ledger.openHoldable(newSeller);
+        ledger.post(Transaction.builder("order-43")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(newSeller.available(), lira("100.00"))
+                .build());
+        ledger.placeHold(new Hold(HOLD_KEY, newSeller, lira("40.00")));
+
+        ledger.openHoldable(newSeller);
+
+        assertThat(ledger.balance(newSeller.held())).isEqualTo(lira("40.00"));
+        assertThat(ledger.activeHolds(newSeller)).hasSize(1);
     }
 
     @Test

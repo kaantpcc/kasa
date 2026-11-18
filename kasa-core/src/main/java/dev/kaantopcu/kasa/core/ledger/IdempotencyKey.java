@@ -41,6 +41,14 @@ public record IdempotencyKey(String value) {
         return new IdempotencyKey(value + suffix);
     }
 
+    void requireNotReversal() {
+        if (value.endsWith(REVERSAL_SUFFIX)) {
+            throw new IllegalArgumentException(
+                    "Transaction %s is a reversal and cannot be reversed; post the original again with a new key"
+                            .formatted(value));
+        }
+    }
+
     void requireNotReserved() {
         for (String suffix : RESERVED_SUFFIXES) {
             if (value.endsWith(suffix)) {

@@ -83,4 +83,26 @@ class AccountIdTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("branch");
     }
+
+    @ParameterizedTest
+    @CsvSource({
+            "seller:42:wallet, seller:42",
+            "seller:42, seller",
+            "seller-42:wallet:held, seller-42:wallet"
+    })
+    void returnsBranchItSitsDirectlyUnder(String id, String parent) {
+        assertThat(new AccountId(id).parent()).contains(new AccountId(parent));
+    }
+
+    @Test
+    void hasNoParentWithSingleSegment() {
+        assertThat(new AccountId("seller-42-wallet").parent()).isEmpty();
+    }
+
+    @Test
+    void isWithinItsParent() {
+        AccountId id = new AccountId("seller:42:wallet");
+
+        assertThat(id.isWithin(id.parent().orElseThrow())).isTrue();
+    }
 }

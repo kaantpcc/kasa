@@ -20,7 +20,9 @@ public abstract sealed class LedgerException extends RuntimeException
                 TransactionNotFoundException,
                 RefundExceedsOriginalException,
                 HoldAlreadySettledException,
-                HeldAccountPostingException {
+                HeldAccountPostingException,
+                ActiveHoldsException,
+                HeldAccountNotEmptyException {
 
     LedgerException(String message) {
         super(message);

@@ -64,7 +64,8 @@ runtime dependencies.
 - **Account hierarchy.** Ids such as `seller:42:wallet` let you sum a whole branch.
 - **Queries.** Point-in-time balances, statements for half-open periods, and a trial balance.
 - **Audit hash chain.** Each transaction is chained with SHA-256; `verifyChain()` finds the first altered record.
-- **Thread-safe and fast.** Posting and balance reads do not slow down as the ledger grows.
+- **Thread-safe and fast.** Posting, balance reads, active holds and branch balances do not slow down as the
+  ledger grows.
 
 ## Installation
 
@@ -205,11 +206,15 @@ ledger.post(Transaction.builder("refund-123-1")
         .build());
 ```
 
+If a refund is later reversed, or partly given back with a refund of its own, that money counts as not refunded
+any more, so it can be refunded again.
+
 ### Reversals
 
 `reverse` cancels a transaction by posting its exact opposite with the key `<key>:reversal` and the original's
 value date. The original stays in the ledger. A reversal counts as a full refund, so a transaction that was
-already partly refunded cannot be reversed (`RefundExceedsOriginalException`).
+already partly refunded cannot be reversed (`RefundExceedsOriginalException`). A reversal itself cannot be
+reversed (`IllegalArgumentException`); to apply the original again, post it with a new key.
 
 ```java
 ledger.reverse("order-1");
@@ -238,7 +243,9 @@ ledger.captureHold("payout-7", bank, Money.of("500.00", "TRY"));   // send it, o
 
 A hold is settled exactly once. Repeating the same capture or release has no effect; settling it a different
 way throws `HoldAlreadySettledException`. The held account changes only through these operations: posting to
-it directly throws `HeldAccountPostingException`.
+it directly throws `HeldAccountPostingException`. It must also start empty (`HeldAccountNotEmptyException`),
+and the available account cannot be closed while one of its holds is active (`ActiveHoldsException`), so held
+money can always be captured or released.
 
 ### Account hierarchy
 
@@ -323,6 +330,8 @@ Rejections that depend on the state of the ledger extend the sealed `LedgerExcep
 | `RefundExceedsOriginalException` | A refund or reversal would give back more than the original moved. |
 | `HoldAlreadySettledException` | A settled hold is settled a different way. |
 | `HeldAccountPostingException` | A held account would change outside the hold operations. |
+| `HeldAccountNotEmptyException` | An account that already holds money is about to become a held account. |
+| `ActiveHoldsException` | An available account is closed while one of its holds is active. |
 
 Invalid input is reported as an `IllegalArgumentException` subclass, such as `UnbalancedTransactionException`,
 `InvalidEntryAmountException`, `CurrencyMismatchException`, `InvalidMoneyScaleException`,
@@ -365,10 +374,13 @@ Measured with [JMH](https://github.com/openjdk/jmh) on a ledger of **100,000 rec
 | `post`, money in (sale) | ~2 µs | nothing (constant) |
 | `post`, money out (payout, policy check) | ~9 µs | nothing (constant) |
 | `entries` of an account with 1,000 entries | ~5 µs | the account's entries |
+| `activeHolds` with 100,000 holds placed before | ~1 µs | the account's active holds |
+| `balanceUnder` among 100,000 accounts | ~1 µs | the accounts in the branch |
 | `verifyChain` | ~100 ms | all transactions (one SHA-256 each) |
 
-Most of the cost of a post is the SHA-256 hash. The numbers come from a desktop machine (Windows 11, JDK 25,
-one fork) and should be read as orders of magnitude. To run the benchmarks yourself:
+Most of the cost of a post is the SHA-256 hash. Memory use is about 0.8 KB per recorded transaction with three
+entries, so a million transactions need roughly 750 MB of heap. The numbers come from a desktop machine
+(Windows 11, JDK 25) and should be read as orders of magnitude. To run the benchmarks yourself:
 
 ```bash
 mvn package -DskipTests
@@ -396,10 +408,8 @@ Kasa `0.1` is honest about what it does not do yet:
 - **In memory only.** Everything is lost when the process stops. PostgreSQL storage is planned for `0.2`.
 - **One capture per hold.** A hold is captured once (fully or partly, with the rest returned); multiple partial
   captures are not supported.
-- **Holdable accounts are closed account by account.** If the available account is closed while a hold is
-  active, that hold can no longer be released.
-- **Open held accounts with `openHoldable`.** If a held account is opened with plain `open` and receives money
-  through `post` before any hold is placed on it, its balance no longer equals its active holds.
+- **Refunds of a hold capture are not linked.** `refundOf` cannot point at a capture, because the money being
+  returned did not leave through the capture itself. Post such a refund without `refundOf`.
 - **Status changes are not in the audit chain.** The hash chain covers money movements, not freezing or
   closing accounts.
 - **Queries follow recording time.** There is no balance by value date.

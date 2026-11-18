@@ -12,7 +12,9 @@ import dev.kaantopcu.kasa.core.money.Money;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,9 +39,10 @@ import java.util.function.Supplier;
  * ledger reuses the last recorded time, so recording times never go backwards. A transaction without a
  * value date gets the recording date in the clock's time zone.
  *
- * <p><b>Performance:</b> posting and current balances do not slow down as the ledger grows. Past balances
- * and statements find their period by binary search over the account's entries, then copy only the lines
- * in it. {@link #verifyChain()} and {@link #trialBalance(Instant)} read every transaction.
+ * <p><b>Performance:</b> posting, current balances, active holds and branch balances do not slow down as the
+ * ledger grows. Past balances and statements find their period by binary search over the account's entries,
+ * then copy only the lines in it. {@link #verifyChain()} and {@link #trialBalance(Instant)} read every
+ * transaction.
  */
 public final class InMemoryLedger implements Ledger {
 
@@ -67,7 +70,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void openHoldable(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
-        write(() -> accounts.openHoldable(account));
+        write(() -> openHoldableAccount(account));
     }
 
     @Override
@@ -85,7 +88,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void close(Account account) {
         Objects.requireNonNull(account, "account");
-        write(() -> accounts.close(account, calculateBalance(account)));
+        write(() -> closeAccount(account));
     }
 
     @Override
@@ -119,6 +122,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void reverse(IdempotencyKey key) {
         Objects.requireNonNull(key, "key");
+        key.requireNotReversal();
         write(() -> recordReversal(key));
     }
 
@@ -217,10 +221,34 @@ public final class InMemoryLedger implements Ledger {
         recordOutsideHolds(original.transaction().reversedOn(original.valueDate()));
     }
 
+    private void openHoldableAccount(HoldableAccount account) {
+        requireEmptyWhenFirstHeld(account.held());
+        accounts.openHoldable(account);
+    }
+
+    private void closeAccount(Account account) {
+        Money balance = calculateBalance(account);
+        if (holds.hasActiveHoldsFrom(account)) {
+            throw new ActiveHoldsException(account.id());
+        }
+        accounts.close(account, balance);
+    }
+
     private void recordHold(Hold hold) {
+        requireEmptyWhenFirstHeld(hold.account().held());
         record(hold.place());
         holds.remember(hold);
         accounts.markHeld(hold.account().held());
+    }
+
+    private void requireEmptyWhenFirstHeld(Account held) {
+        if (accounts.isHeld(held)) {
+            return;
+        }
+        Money balance = journal.balanceOf(held);
+        if (!balance.isZero()) {
+            throw new HeldAccountNotEmptyException(held.id(), balance);
+        }
     }
 
     private void recordCapture(IdempotencyKey holdKey, Account destination, Money amount) {
@@ -235,25 +263,16 @@ public final class InMemoryLedger implements Ledger {
         if (existing.isPresent() && existing.get().transaction().equals(settlementTransaction)) {
             return;
         }
-        if (isSettled(hold)) {
+        if (!holds.isActive(hold)) {
             throw new HoldAlreadySettledException(holdKey);
         }
         record(settlementTransaction);
+        holds.settle(hold);
     }
 
     private List<Hold> activeHoldsOn(HoldableAccount account) {
         accounts.requireOpened(account.available());
-        List<Hold> active = new ArrayList<>();
-        for (Hold hold : holds.placedOn(account)) {
-            if (!isSettled(hold)) {
-                active.add(hold);
-            }
-        }
-        return List.copyOf(active);
-    }
-
-    private boolean isSettled(Hold hold) {
-        return journal.postedWith(hold.captureKey()).isPresent() || journal.postedWith(hold.releaseKey()).isPresent();
+        return holds.activeOn(account);
     }
 
     private void requireWithinRefundable(IdempotencyKey originalKey, Map<Account, Money> changes) {
@@ -264,12 +283,22 @@ public final class InMemoryLedger implements Ledger {
     private RefundLimits refundLimitsOf(IdempotencyKey originalKey) {
         PostedTransaction original = journal.postedWith(originalKey)
                 .orElseThrow(() -> new TransactionNotFoundException(originalKey));
+        return new RefundLimits(balanceChanges(original.transaction()), netRefundedChanges(originalKey));
+    }
+
+    // A refund can itself be reversed or refunded; those later transactions give money back to the original,
+    // so every transaction in the refund chain counts towards what has been refunded so far.
+    private Map<Account, Money> netRefundedChanges(IdempotencyKey originalKey) {
         Map<Account, Money> refundedChanges = new LinkedHashMap<>();
-        for (PostedTransaction refund : journal.refundsOf(originalKey)) {
-            balanceChanges(refund.transaction())
-                    .forEach((account, change) -> refundedChanges.merge(account, change, Money::add));
+        Deque<IdempotencyKey> pending = new ArrayDeque<>(List.of(originalKey));
+        while (!pending.isEmpty()) {
+            for (PostedTransaction refund : journal.refundsOf(pending.pop())) {
+                balanceChanges(refund.transaction())
+                        .forEach((account, change) -> refundedChanges.merge(account, change, Money::add));
+                pending.push(refund.transaction().idempotencyKey());
+            }
         }
-        return new RefundLimits(balanceChanges(original.transaction()), refundedChanges);
+        return refundedChanges;
     }
 
     private PostedTransaction stamp(Transaction transaction) {

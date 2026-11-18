@@ -2,6 +2,7 @@ package dev.kaantopcu.kasa.core.account;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The unique id of an account.
@@ -47,6 +48,22 @@ public record AccountId(String value) {
         List<String> branchSegments = segmentsOf(branch.value());
         return ownSegments.size() >= branchSegments.size()
                 && ownSegments.subList(0, branchSegments.size()).equals(branchSegments);
+    }
+
+    /**
+     * Returns the branch this id sits directly under.
+     *
+     * <p>For example, the parent of {@code "seller:42:wallet"} is {@code "seller:42"}, whose parent is
+     * {@code "seller"}, which has no parent.
+     *
+     * @return the parent id, or empty if this id has a single segment
+     */
+    public Optional<AccountId> parent() {
+        int lastSeparator = value.lastIndexOf(SEGMENT_SEPARATOR);
+        if (lastSeparator < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(new AccountId(value.substring(0, lastSeparator)));
     }
 
     private static void requireNoBlankSegments(String value) {

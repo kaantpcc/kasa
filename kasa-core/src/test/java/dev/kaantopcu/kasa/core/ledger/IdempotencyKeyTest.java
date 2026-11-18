@@ -62,6 +62,23 @@ class IdempotencyKeyTest {
                         .formatted(suffix, suffix));
     }
 
+    @Test
+    void rejectsReversingKeyOfReversal() {
+        IdempotencyKey key = new IdempotencyKey("order-123:reversal");
+
+        assertThatThrownBy(key::requireNotReversal)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Transaction order-123:reversal is a reversal and cannot be reversed; post the original again with a new key");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"order-123", "payout-7:capture", "payout-7:release"})
+    void allowsReversingKeyThatIsNotReversal(String value) {
+        IdempotencyKey key = new IdempotencyKey(value);
+
+        assertThatCode(key::requireNotReversal).doesNotThrowAnyException();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"order:capture:2", "payout-7:Capture", "payout-7-release", "reversal", "order-123:reversals"})
     void acceptsKeyThatOnlyResemblesReservedSuffix(String value) {
