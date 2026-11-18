@@ -979,6 +979,45 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void activeHoldsListsHoldPlacedTwiceWithSameKeyOnce() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+
+        ledger.placeHold(hold);
+        ledger.placeHold(hold);
+
+        assertThat(ledger.activeHolds(SELLER)).containsExactly(hold);
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(lira("300.00"));
+    }
+
+    @Test
+    void activeHoldsDoesNotListReleasedHoldPlacedAgain() {
+        fundSeller("600.00");
+        Hold hold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        ledger.placeHold(hold);
+        ledger.releaseHold(HOLD_KEY);
+
+        ledger.placeHold(hold);
+
+        assertThat(ledger.activeHolds(SELLER)).isEmpty();
+        assertThat(ledger.balance(SELLER.held())).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void activeHoldsListsOnlyHoldsOfGivenAccount() {
+        fundSeller("600.00");
+        depositToCreditCustomer("200.00");
+        Hold sellerHold = new Hold(HOLD_KEY, SELLER, lira("300.00"));
+        Hold customerHold = new Hold(new IdempotencyKey("card-1-hold"), CREDIT_CUSTOMER_CARD, lira("50.00"));
+
+        ledger.placeHold(sellerHold);
+        ledger.placeHold(customerHold);
+
+        assertThat(ledger.activeHolds(SELLER)).containsExactly(sellerHold);
+        assertThat(ledger.activeHolds(CREDIT_CUSTOMER_CARD)).containsExactly(customerHold);
+    }
+
+    @Test
     void openHoldableOpensBothAccounts() {
         HoldableAccount newSeller = new HoldableAccount(
                 account("seller:43:wallet", Side.CREDIT, nonNegative()),

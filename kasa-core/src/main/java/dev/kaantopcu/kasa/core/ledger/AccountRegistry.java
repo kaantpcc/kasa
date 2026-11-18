@@ -12,20 +12,33 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 // Not thread-safe on its own: InMemoryLedger calls it only while holding its read or write lock.
+// Each account is also listed under its own id and every parent id, so that a branch is found
+// without scanning every account (ADR-0019).
 final class AccountRegistry {
 
     private final Map<AccountId, Account> accountsById = new LinkedHashMap<>();
     private final Map<AccountId, AccountStatus> statusesById = new HashMap<>();
     private final Set<AccountId> heldAccountIds = new HashSet<>();
+    private final Map<AccountId, List<Account>> accountsByBranch = new HashMap<>();
 
     void open(Account account) {
         requireOpenable(account);
         if (!accountsById.containsKey(account.id())) {
             accountsById.put(account.id(), account);
             statusesById.put(account.id(), AccountStatus.OPEN);
+            listUnderEveryBranch(account);
+        }
+    }
+
+    private void listUnderEveryBranch(Account account) {
+        Optional<AccountId> branch = Optional.of(account.id());
+        while (branch.isPresent()) {
+            accountsByBranch.computeIfAbsent(branch.get(), id -> new ArrayList<>()).add(account);
+            branch = branch.get().parent();
         }
     }
 
@@ -79,16 +92,11 @@ final class AccountRegistry {
     }
 
     List<Account> accountsWithin(AccountId branch) {
-        List<Account> branchAccounts = new ArrayList<>();
-        for (Account account : accountsById.values()) {
-            if (account.id().isWithin(branch)) {
-                branchAccounts.add(account);
-            }
-        }
-        if (branchAccounts.isEmpty()) {
+        List<Account> branchAccounts = accountsByBranch.get(branch);
+        if (branchAccounts == null) {
             throw new AccountNotOpenException(branch);
         }
-        return branchAccounts;
+        return List.copyOf(branchAccounts);
     }
 
     void requireOpened(Account account) {

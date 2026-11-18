@@ -37,9 +37,10 @@ import java.util.function.Supplier;
  * ledger reuses the last recorded time, so recording times never go backwards. A transaction without a
  * value date gets the recording date in the clock's time zone.
  *
- * <p><b>Performance:</b> posting and current balances do not slow down as the ledger grows. Past balances
- * and statements find their period by binary search over the account's entries, then copy only the lines
- * in it. {@link #verifyChain()} and {@link #trialBalance(Instant)} read every transaction.
+ * <p><b>Performance:</b> posting, current balances, active holds and branch balances do not slow down as the
+ * ledger grows. Past balances and statements find their period by binary search over the account's entries,
+ * then copy only the lines in it. {@link #verifyChain()} and {@link #trialBalance(Instant)} read every
+ * transaction.
  */
 public final class InMemoryLedger implements Ledger {
 
@@ -235,25 +236,16 @@ public final class InMemoryLedger implements Ledger {
         if (existing.isPresent() && existing.get().transaction().equals(settlementTransaction)) {
             return;
         }
-        if (isSettled(hold)) {
+        if (!holds.isActive(hold)) {
             throw new HoldAlreadySettledException(holdKey);
         }
         record(settlementTransaction);
+        holds.settle(hold);
     }
 
     private List<Hold> activeHoldsOn(HoldableAccount account) {
         accounts.requireOpened(account.available());
-        List<Hold> active = new ArrayList<>();
-        for (Hold hold : holds.placedOn(account)) {
-            if (!isSettled(hold)) {
-                active.add(hold);
-            }
-        }
-        return List.copyOf(active);
-    }
-
-    private boolean isSettled(Hold hold) {
-        return journal.postedWith(hold.captureKey()).isPresent() || journal.postedWith(hold.releaseKey()).isPresent();
+        return holds.activeOn(account);
     }
 
     private void requireWithinRefundable(IdempotencyKey originalKey, Map<Account, Money> changes) {

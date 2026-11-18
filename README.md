@@ -64,7 +64,8 @@ runtime dependencies.
 - **Account hierarchy.** Ids such as `seller:42:wallet` let you sum a whole branch.
 - **Queries.** Point-in-time balances, statements for half-open periods, and a trial balance.
 - **Audit hash chain.** Each transaction is chained with SHA-256; `verifyChain()` finds the first altered record.
-- **Thread-safe and fast.** Posting and balance reads do not slow down as the ledger grows.
+- **Thread-safe and fast.** Posting, balance reads, active holds and branch balances do not slow down as the
+  ledger grows.
 
 ## Installation
 
@@ -365,10 +366,13 @@ Measured with [JMH](https://github.com/openjdk/jmh) on a ledger of **100,000 rec
 | `post`, money in (sale) | ~2 µs | nothing (constant) |
 | `post`, money out (payout, policy check) | ~9 µs | nothing (constant) |
 | `entries` of an account with 1,000 entries | ~5 µs | the account's entries |
+| `activeHolds` with 100,000 holds placed before | ~1 µs | the account's active holds |
+| `balanceUnder` among 100,000 accounts | ~1 µs | the accounts in the branch |
 | `verifyChain` | ~100 ms | all transactions (one SHA-256 each) |
 
-Most of the cost of a post is the SHA-256 hash. The numbers come from a desktop machine (Windows 11, JDK 25,
-one fork) and should be read as orders of magnitude. To run the benchmarks yourself:
+Most of the cost of a post is the SHA-256 hash. Memory use is about 0.8 KB per recorded transaction with three
+entries, so a million transactions need roughly 750 MB of heap. The numbers come from a desktop machine
+(Windows 11, JDK 25) and should be read as orders of magnitude. To run the benchmarks yourself:
 
 ```bash
 mvn package -DskipTests
