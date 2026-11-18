@@ -68,7 +68,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void openHoldable(HoldableAccount account) {
         Objects.requireNonNull(account, "account");
-        write(() -> accounts.openHoldable(account));
+        write(() -> openHoldableAccount(account));
     }
 
     @Override
@@ -86,7 +86,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void close(Account account) {
         Objects.requireNonNull(account, "account");
-        write(() -> accounts.close(account, calculateBalance(account)));
+        write(() -> closeAccount(account));
     }
 
     @Override
@@ -218,10 +218,34 @@ public final class InMemoryLedger implements Ledger {
         recordOutsideHolds(original.transaction().reversedOn(original.valueDate()));
     }
 
+    private void openHoldableAccount(HoldableAccount account) {
+        requireEmptyWhenFirstHeld(account.held());
+        accounts.openHoldable(account);
+    }
+
+    private void closeAccount(Account account) {
+        Money balance = calculateBalance(account);
+        if (holds.hasActiveHoldsFrom(account)) {
+            throw new ActiveHoldsException(account.id());
+        }
+        accounts.close(account, balance);
+    }
+
     private void recordHold(Hold hold) {
+        requireEmptyWhenFirstHeld(hold.account().held());
         record(hold.place());
         holds.remember(hold);
         accounts.markHeld(hold.account().held());
+    }
+
+    private void requireEmptyWhenFirstHeld(Account held) {
+        if (accounts.isHeld(held)) {
+            return;
+        }
+        Money balance = journal.balanceOf(held);
+        if (!balance.isZero()) {
+            throw new HeldAccountNotEmptyException(held.id(), balance);
+        }
     }
 
     private void recordCapture(IdempotencyKey holdKey, Account destination, Money amount) {

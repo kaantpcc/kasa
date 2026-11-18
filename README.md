@@ -239,7 +239,9 @@ ledger.captureHold("payout-7", bank, Money.of("500.00", "TRY"));   // send it, o
 
 A hold is settled exactly once. Repeating the same capture or release has no effect; settling it a different
 way throws `HoldAlreadySettledException`. The held account changes only through these operations: posting to
-it directly throws `HeldAccountPostingException`.
+it directly throws `HeldAccountPostingException`. It must also start empty (`HeldAccountNotEmptyException`),
+and the available account cannot be closed while one of its holds is active (`ActiveHoldsException`), so held
+money can always be captured or released.
 
 ### Account hierarchy
 
@@ -324,6 +326,8 @@ Rejections that depend on the state of the ledger extend the sealed `LedgerExcep
 | `RefundExceedsOriginalException` | A refund or reversal would give back more than the original moved. |
 | `HoldAlreadySettledException` | A settled hold is settled a different way. |
 | `HeldAccountPostingException` | A held account would change outside the hold operations. |
+| `HeldAccountNotEmptyException` | An account that already holds money is about to become a held account. |
+| `ActiveHoldsException` | An available account is closed while one of its holds is active. |
 
 Invalid input is reported as an `IllegalArgumentException` subclass, such as `UnbalancedTransactionException`,
 `InvalidEntryAmountException`, `CurrencyMismatchException`, `InvalidMoneyScaleException`,
@@ -400,10 +404,8 @@ Kasa `0.1` is honest about what it does not do yet:
 - **In memory only.** Everything is lost when the process stops. PostgreSQL storage is planned for `0.2`.
 - **One capture per hold.** A hold is captured once (fully or partly, with the rest returned); multiple partial
   captures are not supported.
-- **Holdable accounts are closed account by account.** If the available account is closed while a hold is
-  active, that hold can no longer be released.
-- **Open held accounts with `openHoldable`.** If a held account is opened with plain `open` and receives money
-  through `post` before any hold is placed on it, its balance no longer equals its active holds.
+- **Refunds of a hold capture are not linked.** `refundOf` cannot point at a capture, because the money being
+  returned did not leave through the capture itself. Post such a refund without `refundOf`.
 - **Status changes are not in the audit chain.** The hash chain covers money movements, not freezing or
   closing accounts.
 - **Queries follow recording time.** There is no balance by value date.

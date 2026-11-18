@@ -36,6 +36,8 @@ class LedgerExceptionTest {
             case RefundExceedsOriginalException rejected -> "refund-exceeds-original";
             case HoldAlreadySettledException rejected -> "hold-already-settled";
             case HeldAccountPostingException rejected -> "held-account-posting";
+            case ActiveHoldsException rejected -> "active-holds";
+            case HeldAccountNotEmptyException rejected -> "held-account-not-empty";
         };
     }
 }

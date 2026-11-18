@@ -53,8 +53,12 @@ final class AccountRegistry {
         heldAccountIds.add(held.id());
     }
 
+    boolean isHeld(Account account) {
+        return heldAccountIds.contains(account.id());
+    }
+
     void requireNotHeld(Account account) {
-        if (heldAccountIds.contains(account.id())) {
+        if (isHeld(account)) {
             throw new HeldAccountPostingException(account.id());
         }
     }

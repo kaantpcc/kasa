@@ -53,6 +53,8 @@ public interface LedgerWriter {
      * @throws AccountClosedException             if either account is closed
      * @throws AccountFrozenException             if the available account is frozen
      * @throws InsufficientFundsException         if the available account's balance policy would be broken
+     * @throws HeldAccountNotEmptyException       if this is the first hold on the held account and it already
+     *                                            received money in another way
      */
     void placeHold(Hold hold);
 

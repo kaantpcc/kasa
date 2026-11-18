@@ -26,11 +26,13 @@ public interface AccountAdministration {
      * Opens both accounts of a holdable account and marks the held account so that it changes only through
      * the hold operations.
      *
-     * <p>Either both accounts are opened or neither is.
+     * <p>Either both accounts are opened or neither is. The held account must start empty: its balance must
+     * always equal the sum of its active holds.
      *
      * @param account the holdable account to open
      * @throws AccountDefinitionConflictException if either id is open with a different definition
      * @throws AccountClosedException             if either account was closed
+     * @throws HeldAccountNotEmptyException       if the held account already received money in another way
      */
     void openHoldable(HoldableAccount account);
 
@@ -61,6 +63,8 @@ public interface AccountAdministration {
      * @throws AccountNotOpenException            if the account has not been opened
      * @throws AccountDefinitionConflictException if the account was opened with a different definition
      * @throws NonZeroBalanceException            if the account's balance is not zero
+     * @throws ActiveHoldsException               if the account is the available account of a hold that is
+     *                                            still active
      */
     void close(Account account);
 }

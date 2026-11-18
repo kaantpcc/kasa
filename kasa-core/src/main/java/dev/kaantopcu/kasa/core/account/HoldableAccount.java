@@ -9,8 +9,9 @@ import java.util.Objects;
  *
  * <p>Placing a hold moves money from the available account to the held account, so it can no longer be
  * spent but still belongs to the owner. The total balance is the sum of both. Open it with
- * {@link dev.kaantopcu.kasa.core.ledger.AccountAdministration#openHoldable(HoldableAccount)}; after that,
- * the held account changes only through the ledger's hold operations.
+ * {@link dev.kaantopcu.kasa.core.ledger.AccountAdministration#openHoldable(HoldableAccount)}; the held account
+ * must start empty, and after that it changes only through the ledger's hold operations. The available
+ * account cannot be closed while one of its holds is active.
  *
  * @param available the account the owner can spend from
  * @param held      the account that keeps money on hold
