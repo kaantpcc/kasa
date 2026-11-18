@@ -206,11 +206,15 @@ ledger.post(Transaction.builder("refund-123-1")
         .build());
 ```
 
+If a refund is later reversed, or partly given back with a refund of its own, that money counts as not refunded
+any more, so it can be refunded again.
+
 ### Reversals
 
 `reverse` cancels a transaction by posting its exact opposite with the key `<key>:reversal` and the original's
 value date. The original stays in the ledger. A reversal counts as a full refund, so a transaction that was
-already partly refunded cannot be reversed (`RefundExceedsOriginalException`).
+already partly refunded cannot be reversed (`RefundExceedsOriginalException`). A reversal itself cannot be
+reversed (`IllegalArgumentException`); to apply the original again, post it with a new key.
 
 ```java
 ledger.reverse("order-1");

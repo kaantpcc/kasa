@@ -276,6 +276,54 @@ abstract class LedgerContractTest {
     }
 
     @Test
+    void allowsFullRefundAfterEarlierRefundIsReversed() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+        ledger.reverse("refund-1");
+
+        ledger.post(Transaction.builder("refund-2")
+                .refundOf("order-1")
+                .debit(SELLER_WALLET, lira("900.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("900.00"))
+                .build());
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+    }
+
+    @Test
+    void countsMoneyGivenBackToRefundTowardsOriginal() {
+        ledger.post(sale("order-1"));
+        ledger.post(refund("refund-1", "order-1"));
+        ledger.post(Transaction.builder("refund-1-correction")
+                .refundOf("refund-1")
+                .debit(CUSTOMER_PAYMENTS, lira("100.00"))
+                .credit(SELLER_WALLET, lira("100.00"))
+                .build());
+        Transaction tooLarge = Transaction.builder("refund-2")
+                .refundOf("order-1")
+                .debit(SELLER_WALLET, lira("701.00"))
+                .credit(CUSTOMER_PAYMENTS, lira("701.00"))
+                .build();
+
+        assertThatThrownBy(() -> ledger.post(tooLarge))
+                .isInstanceOf(RefundExceedsOriginalException.class)
+                .hasMessage("Refund exceeds what can be refunded on seller:42:wallet: refundable 700.00 TRY, requested 701.00 TRY");
+    }
+
+    @Test
+    void rejectsReversingReversal() {
+        ledger.post(sale("order-1"));
+        ledger.reverse("order-1");
+
+        assertThatThrownBy(() -> ledger.reverse("order-1:reversal"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Transaction order-1:reversal is a reversal and cannot be reversed; post the original again with a new key");
+
+        assertThat(ledger.balance(SELLER_WALLET)).isEqualTo(Money.zero(TRY));
+        assertThat(ledger.posted("order-1:reversal:reversal")).isEmpty();
+    }
+
+    @Test
     void ignoresEntriesOfAnotherAccounts() {
         ledger.post(sale("order-1"));
 

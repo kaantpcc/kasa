@@ -12,7 +12,9 @@ import dev.kaantopcu.kasa.core.money.Money;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +122,7 @@ public final class InMemoryLedger implements Ledger {
     @Override
     public void reverse(IdempotencyKey key) {
         Objects.requireNonNull(key, "key");
+        key.requireNotReversal();
         write(() -> recordReversal(key));
     }
 
@@ -280,12 +283,22 @@ public final class InMemoryLedger implements Ledger {
     private RefundLimits refundLimitsOf(IdempotencyKey originalKey) {
         PostedTransaction original = journal.postedWith(originalKey)
                 .orElseThrow(() -> new TransactionNotFoundException(originalKey));
+        return new RefundLimits(balanceChanges(original.transaction()), netRefundedChanges(originalKey));
+    }
+
+    // A refund can itself be reversed or refunded; those later transactions give money back to the original,
+    // so every transaction in the refund chain counts towards what has been refunded so far.
+    private Map<Account, Money> netRefundedChanges(IdempotencyKey originalKey) {
         Map<Account, Money> refundedChanges = new LinkedHashMap<>();
-        for (PostedTransaction refund : journal.refundsOf(originalKey)) {
-            balanceChanges(refund.transaction())
-                    .forEach((account, change) -> refundedChanges.merge(account, change, Money::add));
+        Deque<IdempotencyKey> pending = new ArrayDeque<>(List.of(originalKey));
+        while (!pending.isEmpty()) {
+            for (PostedTransaction refund : journal.refundsOf(pending.pop())) {
+                balanceChanges(refund.transaction())
+                        .forEach((account, change) -> refundedChanges.merge(account, change, Money::add));
+                pending.push(refund.transaction().idempotencyKey());
+            }
         }
-        return new RefundLimits(balanceChanges(original.transaction()), refundedChanges);
+        return refundedChanges;
     }
 
     private PostedTransaction stamp(Transaction transaction) {

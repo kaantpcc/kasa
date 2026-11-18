@@ -19,7 +19,8 @@ public interface LedgerWriter {
      *
      * <p>If a transaction with the same key was already posted, posting the same transaction again has no
      * effect. If the transaction has {@link Transaction#refundOf() refundOf}, it may give back at most what
-     * the original moved, counting earlier refunds.
+     * the original moved, counting earlier refunds net of anything that later gave them back, such as their
+     * reversals.
      *
      * @param transaction the transaction to record
      * @throws IllegalArgumentException           if the key ends with {@code ":reversal"}, {@code ":capture"}
@@ -121,9 +122,12 @@ public interface LedgerWriter {
      *
      * <p>The reversal has the key {@code key + ":reversal"}, the original's value date, and counts as a
      * refund of the original. The original stays in the ledger. Reversing again has no effect. A transaction
-     * that was already partly refunded cannot be reversed, and neither can hold transactions.
+     * that was already partly refunded cannot be reversed, and neither can hold transactions or reversals; to
+     * apply a reversed transaction again, post it with a new key.
      *
      * @param key the key of the transaction to reverse
+     * @throws IllegalArgumentException       if {@code key} ends with {@code ":reversal"}, that is, it names a
+     *                                        reversal
      * @throws TransactionNotFoundException   if no transaction was posted with {@code key}
      * @throws RefundExceedsOriginalException if the transaction was already partly or fully refunded
      * @throws HeldAccountPostingException    if the transaction touches a held account

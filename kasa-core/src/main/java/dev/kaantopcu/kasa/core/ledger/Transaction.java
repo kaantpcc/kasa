@@ -211,8 +211,8 @@ public record Transaction(IdempotencyKey idempotencyKey,
          * Marks the transaction as a refund of an earlier one.
          *
          * <p>When it is posted, the ledger rejects it if, together with earlier refunds of the same
-         * original, it would give back more to any account than the original moved. Partial refunds are
-         * allowed.
+         * original, it would give back more to any account than the original moved. Earlier refunds count
+         * net of anything that later gave them back, such as their reversals. Partial refunds are allowed.
          *
          * @param originalKey the idempotency key of the transaction being refunded
          * @return this builder

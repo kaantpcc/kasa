@@ -6,6 +6,7 @@ import dev.kaantopcu.kasa.core.account.HoldableAccount;
 import dev.kaantopcu.kasa.core.money.Money;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,16 +78,42 @@ final class LedgerInvariants {
     private void checkRefundsStayWithinOriginals(Instant afterLastRecord) {
         for (Account account : Marketplace.ALL) {
             List<StatementLine> lines = ledger.statement(account, start, afterLastRecord).lines();
-            Map<IdempotencyKey, Money> originals = changesBy(lines,
+            Map<IdempotencyKey, Money> changes = changesBy(lines,
                     line -> Optional.of(line.posted().transaction().idempotencyKey()));
-            Map<IdempotencyKey, Money> refunds = changesBy(lines, line -> line.posted().transaction().refundOf());
-            refunds.forEach((originalKey, refunded) -> {
-                Money original = originals.getOrDefault(originalKey, Money.zero(account.currency()));
+            Map<IdempotencyKey, List<IdempotencyKey>> refundsByOriginal = refundsByOriginal(lines);
+            Money zero = Money.zero(account.currency());
+            for (IdempotencyKey originalKey : refundsByOriginal.keySet()) {
+                Money original = changes.getOrDefault(originalKey, zero);
+                Money refunded = netRefunded(originalKey, refundsByOriginal, changes, zero);
                 assertThat(isBetweenZeroAnd(original.add(refunded), original))
-                        .as("refunds of %s on %s stay within the original", originalKey.value(), idOf(account))
+                        .as("net refunds of %s on %s stay within the original", originalKey.value(), idOf(account))
                         .isTrue();
+            }
+        }
+    }
+
+    private static Map<IdempotencyKey, List<IdempotencyKey>> refundsByOriginal(List<StatementLine> lines) {
+        Map<IdempotencyKey, List<IdempotencyKey>> refunds = new LinkedHashMap<>();
+        for (StatementLine line : lines) {
+            Transaction transaction = line.posted().transaction();
+            transaction.refundOf().ifPresent(originalKey -> {
+                List<IdempotencyKey> keys = refunds.computeIfAbsent(originalKey, key -> new ArrayList<>());
+                if (!keys.contains(transaction.idempotencyKey())) {
+                    keys.add(transaction.idempotencyKey());
+                }
             });
         }
+        return refunds;
+    }
+
+    private static Money netRefunded(IdempotencyKey originalKey, Map<IdempotencyKey, List<IdempotencyKey>> refundsByOriginal,
+                                     Map<IdempotencyKey, Money> changes, Money zero) {
+        Money total = zero;
+        for (IdempotencyKey refundKey : refundsByOriginal.getOrDefault(originalKey, List.of())) {
+            total = total.add(changes.getOrDefault(refundKey, zero))
+                    .add(netRefunded(refundKey, refundsByOriginal, changes, zero));
+        }
+        return total;
     }
 
     private void checkHeldBalancesMatchActiveHolds() {
