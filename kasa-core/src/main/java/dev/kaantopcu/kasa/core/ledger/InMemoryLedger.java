@@ -22,6 +22,25 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+/**
+ * A {@link Ledger} that keeps everything in memory.
+ *
+ * <p>Use it in tests, prototypes, or applications that rebuild their state on start-up; everything is lost
+ * when the process stops.
+ *
+ * <p><b>Thread safety:</b> an instance is safe to share between threads. Writes run one at a time, and
+ * reads run in parallel with each other but never during a write, so a reader never sees half of a
+ * transaction. Every returned object is immutable.
+ *
+ * <p><b>Time:</b> the ledger stamps each transaction with the {@link Clock} it was created with. Pass
+ * {@code Clock.systemUTC()} in production and a fixed clock in tests. If the clock moves backwards, the
+ * ledger reuses the last recorded time, so recording times never go backwards. A transaction without a
+ * value date gets the recording date in the clock's time zone.
+ *
+ * <p><b>Performance:</b> posting and current balances do not slow down as the ledger grows. Past balances
+ * and statements find their period by binary search over the account's entries, then copy only the lines
+ * in it. {@link #verifyChain()} and {@link #trialBalance(Instant)} read every transaction.
+ */
 public final class InMemoryLedger implements Ledger {
 
     private final AccountRegistry accounts = new AccountRegistry();
@@ -30,6 +49,11 @@ public final class InMemoryLedger implements Ledger {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Clock clock;
 
+    /**
+     * Creates an empty ledger.
+     *
+     * @param clock the clock that stamps recording times and decides default value dates
+     */
     public InMemoryLedger(Clock clock) {
         this.clock = Objects.requireNonNull(clock, "clock");
     }

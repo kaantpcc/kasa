@@ -9,11 +9,32 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * A request to put an amount on hold in a holdable account, for example a card authorization.
+ *
+ * <p>{@link LedgerWriter#placeHold(Hold)} moves the amount from the available account to the held account.
+ * The hold is then settled exactly once: {@link LedgerWriter#captureHold(IdempotencyKey, Account, Money)}
+ * sends all or part of it to a destination and returns the rest, or
+ * {@link LedgerWriter#releaseHold(IdempotencyKey)} returns all of it.
+ *
+ * @param key     the caller's unique key for the hold; capture and release refer to it
+ * @param account the holdable account the money is held in
+ * @param amount  the positive amount to hold, in the account's currency
+ */
 public record Hold(IdempotencyKey key, HoldableAccount account, Money amount) {
 
     private static final String CAPTURE_SUFFIX = ":capture";
     private static final String RELEASE_SUFFIX = ":release";
 
+    /**
+     * Creates a hold request.
+     *
+     * @param key     the caller's unique key for the hold
+     * @param account the holdable account the money is held in
+     * @param amount  the positive amount to hold, in the account's currency
+     * @throws IllegalArgumentException  if {@code amount} is zero or negative
+     * @throws CurrencyMismatchException if {@code amount} is not in the account's currency
+     */
     public Hold {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(account, "account");
